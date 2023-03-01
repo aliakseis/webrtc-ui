@@ -1,173 +1,155 @@
+<?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
- <author/>
- <comment/>
- <exportmacro/>
  <class>Preferences</class>
  <widget class="QDialog" name="Preferences">
   <property name="geometry">
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>400</width>
-    <height>300</height>
+    <width>511</width>
+    <height>347</height>
    </rect>
+  </property>
+  <property name="sizePolicy">
+   <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+    <horstretch>0</horstretch>
+    <verstretch>0</verstretch>
+   </sizepolicy>
   </property>
   <property name="windowTitle">
    <string>Settings</string>
   </property>
-
-
-
-
-
-
-
-
-
-
-   <widget class="QWidget" name="layoutWidget">
-    <layout class="QHBoxLayout" name="horizontalLayout_4" stretch="0,0">
-     <property name="spacing">
-      <number>0</number>
-     </property>
-     <item>
-      <widget class="QGroupBox" name="groupBox_camera">
-       <property name="sizePolicy">
-        <sizepolicy hsizetype="Maximum" vsizetype="MinimumExpanding">
-         <horstretch>0</horstretch>
-         <verstretch>0</verstretch>
-        </sizepolicy>
-       </property>
-       <property name="title">
-        <string>Camera</string>
-       </property>
-       <layout class="QGridLayout" name="gridLayout_4">
-
-        <item row="1" column="0">
-           <widget class="QRadioButton" name="gstreamerSource">
-            <!--property name="sizePolicy">
-             <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
-              <horstretch>0</horstretch>
-              <verstretch>0</verstretch>
-             </sizepolicy>
-            </property-->
-            <property name="text">
-             <string>GStreamer source</string>
-            </property>
-           </widget>
-          </item>
-
-
-        <item row="1" column="1">
-         <layout class="QHBoxLayout" name="horizontalLayout_2">
-          <item>
-           <widget class="QComboBox" name="comboBox_camera">
-            <property name="sizePolicy">
-             <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
-              <horstretch>0</horstretch>
-              <verstretch>0</verstretch>
-             </sizepolicy>
-            </property>
-           </widget>
-          </item>
-          <item>
-           <widget class="QPushButton" name="pushButton_update_camera_list">
-            <property name="sizePolicy">
-             <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
-              <horstretch>0</horstretch>
-              <verstretch>0</verstretch>
-             </sizepolicy>
-            </property>
-            <property name="toolTip">
-             <string>
+  <widget class="QWidget" name="layoutWidget">
+   <property name="geometry">
+    <rect>
+     <x>0</x>
+     <y>0</y>
+     <width>511</width>
+     <height>111</height>
+    </rect>
+   </property>
+   <layout class="QHBoxLayout" name="horizontalLayout_4" stretch="0">
+    <property name="spacing">
+     <number>0</number>
+    </property>
+    <item>
+     <widget class="QGroupBox" name="groupBox_camera">
+      <property name="sizePolicy">
+       <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+        <horstretch>0</horstretch>
+        <verstretch>0</verstretch>
+       </sizepolicy>
+      </property>
+      <property name="title">
+       <string>Camera</string>
+      </property>
+      <layout class="QGridLayout" name="gridLayout_4">
+       <item row="1" column="0">
+        <widget class="QRadioButton" name="gstreamerSource">
+         <property name="text">
+          <string>GStreamer source</string>
+         </property>
+        </widget>
+       </item>
+       <item row="1" column="1">
+        <layout class="QHBoxLayout" name="horizontalLayout_2">
+         <item>
+          <widget class="QComboBox" name="comboBox_camera">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="pushButton_update_camera_list">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="toolTip">
+            <string>
                      Click to update the list of available
                      cameras. Useful if connection and USB camera
                    </string>
-            </property>
-            <property name="text">
-             <string>Update</string>
-            </property>
-           </widget>
-          </item>
-         </layout>
-        </item>
-        <item row="2" column="0" colspan="2">
-         <layout class="QHBoxLayout" name="verticalLayout_9">
-          <item>
-           <widget class="QLabel" name="label_camera">
-            <property name="sizePolicy">
-             <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
-              <horstretch>0</horstretch>
-              <verstretch>0</verstretch>
-             </sizepolicy>
-            </property>
-            <property name="text">
-             <string/>
-            </property>
-           </widget>
-          </item>
-
-      <item>
-       <spacer name="horizontalSpacer">
-        <property name="orientation">
-         <enum>Qt::Horizontal</enum>
-        </property>
-        <property name="sizeType">
-         <enum>QSizePolicy::Minimum</enum>
-        </property>
-        <property name="sizeHint" stdset="0">
-         <size>
-          <width>10</width>
-          <height>20</height>
-         </size>
-        </property>
-       </spacer>
-      </item>
-
-          <item>
-           <widget class="QLabel" name="label_8">
-            <property name="sizePolicy">
-             <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
-              <horstretch>0</horstretch>
-              <verstretch>0</verstretch>
-             </sizepolicy>
-            </property>
-            <property name="text">
-             <string>Resolution and FPS</string>
-            </property>
-           </widget>
-          </item>
-          <item>
-           <widget class="QComboBox" name="comboBox_camera_res"/>
-          </item>
-         </layout>
-        </item>
-
-        <item row="3" column="0">
-           <widget class="QRadioButton" name="ffmpegSource">
-            <property name="text">
-             <string>FFmpeg source</string>
-            </property>
-           </widget>
-          </item>
-
-
-
-
-</layout>
-
-</widget>
-
-</item>
-
-</layout>
-</widget>
-
+           </property>
+           <property name="text">
+            <string>Update</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+       <item row="2" column="0" colspan="2">
+        <layout class="QHBoxLayout" name="verticalLayout_9">
+         <item>
+          <widget class="QLabel" name="label_camera">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="text">
+            <string/>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <spacer name="horizontalSpacer">
+           <property name="orientation">
+            <enum>Qt::Horizontal</enum>
+           </property>
+           <property name="sizeType">
+            <enum>QSizePolicy::Minimum</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>10</width>
+             <height>20</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
+         <item>
+          <widget class="QLabel" name="label_8">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="text">
+            <string>Resolution and FPS</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QComboBox" name="comboBox_camera_res"/>
+         </item>
+        </layout>
+       </item>
+       <item row="0" column="0">
+        <widget class="QRadioButton" name="autoVideoSrc">
+         <property name="text">
+          <string>Auto video source</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+   </layout>
+  </widget>
   <widget class="QDialogButtonBox" name="buttonBox">
    <property name="geometry">
     <rect>
-     <x>30</x>
-     <y>240</y>
+     <x>160</x>
+     <y>310</y>
      <width>341</width>
      <height>32</height>
     </rect>
@@ -180,7 +162,6 @@
    </property>
   </widget>
  </widget>
- <pixmapfunction/>
  <resources/>
  <connections>
   <connection>
