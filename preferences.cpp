@@ -83,22 +83,3 @@ void Preferences::on_pushButton_update_audio_list_clicked()
     ui->comboBox_audio->addItems( updateAudioInfo() );
 }
 
-void Preferences::on_comboBox_audio_currentIndexChanged(int index)
-{
-    if( mAudios.empty() ) {
-        return;
-    }
-
-    if( index>mAudios.size()-1  ) {
-        return;
-    }
-
-    if( index<0 )
-    {
-        ui->label_audio->setText( tr("No audio info") );
-    }
-    else
-    {
-        ui->label_audio->setText(mAudios.at(index).description);
-    }
-}
