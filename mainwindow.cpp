@@ -4,11 +4,15 @@
 #include "maintoolbar.h"
 #include "preferences.h"
 
+#include <QMessageBox>
+
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
     , m_mainToolbar(new MainToolBar(this))
 {
+    setWindowIcon(QIcon(":/ico.png"));
+
     ui->setupUi(this);
     ui->toolBar->addWidget(m_mainToolbar);
 
@@ -30,7 +34,15 @@ void MainWindow::onHangUp()
 {}
 
 void MainWindow::onHelp()
-{}
+{
+    raise();
+    activateWindow();
+    QMessageBox::about(
+        this,
+        tr("About webrtc-ui"),
+        '\n' + QApplication::organizationDomain() + '/' + QApplication::organizationName() + '/' + QApplication::applicationName());
+
+}
 
 void MainWindow::onSettings()
 {

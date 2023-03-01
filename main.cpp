@@ -7,6 +7,11 @@
 int main(int argc, char *argv[])
 {
     QApplication a(argc, argv);
+
+    QApplication::setApplicationName("webrtc-ui");
+    QApplication::setOrganizationName("aliakseis");
+    QApplication::setOrganizationDomain("github.com");
+
     a.setStyle(QStyleFactory::create("Fusion"));
     /* Apply stylesheet */
     QFile css_data(":/style.css");

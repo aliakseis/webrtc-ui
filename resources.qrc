@@ -1,6 +1,7 @@
 <RCC>
   <qresource prefix="/">
         <file>style.css</file>
+    <file alias="ico.png">resources/ico.png</file>
     <file alias="bubble.ico">resources/chat_message_bubble_icon_231190.ico</file>
     <file alias="hang_up.ico">resources/phone_cross_hang_up_icon_231249.ico</file>
     <file alias="hang_up_active.ico">resources/phone_cross_hang_up_icon_active.ico</file>
