@@ -8,7 +8,7 @@ set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # QtCreator supports the following variables for Android, which are identical to qmake Android variables.
@@ -23,6 +23,31 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 #            ${CMAKE_CURRENT_SOURCE_DIR}/path/to/libssl.so)
 #    endif()
 #endif()
+
+
+
+find_package(PkgConfig)
+
+pkg_check_modules(GSTREAMER REQUIRED 
+  glib-2.0
+  json-glib-1.0
+  libsoup-2.4
+  gstreamer-1.0 
+  gstreamer-video-1.0
+  gstreamer-sdp-1.0
+  gstreamer-rtp-1.0
+  gstreamer-webrtc-1.0
+)
+
+message("GSTREAMER_INCLUDE_DIRS: ${GSTREAMER_INCLUDE_DIRS}")
+
+message("GSTREAMER_LIBRARY_DIRS: ${GSTREAMER_LIBRARY_DIRS}")
+
+
+link_directories(${GSTREAMER_LIBRARY_DIRS})
+
+
+
 
 find_package(QT NAMES Qt6 Qt5 COMPONENTS Widgets REQUIRED)
 find_package(Qt${QT_VERSION_MAJOR} COMPONENTS Widgets REQUIRED)
@@ -42,6 +67,8 @@ if(ANDROID)
     preferences.cpp
     preferences.h
     preferences.ui
+    cameraman.cpp
+    cameraman.h
     ${QRCS}
   )
 else()
@@ -56,8 +83,12 @@ else()
     preferences.cpp
     preferences.h
     preferences.ui
+    cameraman.cpp
+    cameraman.h
     ${QRCS}
   )
 endif()
 
-target_link_libraries(webrtc-ui PRIVATE Qt${QT_VERSION_MAJOR}::Widgets)
+target_include_directories(webrtc-ui PUBLIC ${GSTREAMER_INCLUDE_DIRS})
+
+target_link_libraries(webrtc-ui PRIVATE Qt${QT_VERSION_MAJOR}::Widgets ${GSTREAMER_LIBRARIES})
