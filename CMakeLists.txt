@@ -39,6 +39,9 @@ if(ANDROID)
     maintoolbar.cpp
     maintoolbar.h
     maintoolbar.ui
+    preferences.cpp
+    preferences.h
+    preferences.ui
     ${QRCS}
   )
 else()
@@ -50,6 +53,9 @@ else()
     maintoolbar.cpp
     maintoolbar.h
     maintoolbar.ui
+    preferences.cpp
+    preferences.h
+    preferences.ui
     ${QRCS}
   )
 endif()

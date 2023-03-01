@@ -2,10 +2,12 @@
 
 #include <QApplication>
 #include <QFile>
+#include <QStyleFactory>
 
 int main(int argc, char *argv[])
 {
     QApplication a(argc, argv);
+    a.setStyle(QStyleFactory::create("Fusion"));
     /* Apply stylesheet */
     QFile css_data(":/style.css");
     if (css_data.open(QIODevice::ReadOnly))

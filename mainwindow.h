@@ -17,6 +17,12 @@ public:
     MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
 
+private slots:
+    void onRingingCall();
+    void onHangUp();
+    void onHelp();
+    void onSettings();
+
 private:
     Ui::MainWindow *ui;
 
