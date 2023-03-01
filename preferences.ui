@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>561</width>
+    <width>680</width>
     <height>347</height>
    </rect>
   </property>
@@ -24,7 +24,7 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>561</width>
+     <width>681</width>
      <height>251</height>
     </rect>
    </property>
@@ -195,6 +195,21 @@
          </item>
         </layout>
        </item>
+
+       <item row="2" column="0" colspan="2">
+          <widget class="QLabel" name="label_audio">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Maximum" vsizetype="Preferred">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="text">
+            <string/>
+           </property>
+          </widget>
+         </item>
+
        <item row="0" column="0">
         <widget class="QRadioButton" name="autoAudioSrc">
          <property name="text">
@@ -210,7 +225,7 @@
   <widget class="QDialogButtonBox" name="buttonBox">
    <property name="geometry">
     <rect>
-     <x>210</x>
+     <x>330</x>
      <y>310</y>
      <width>341</width>
      <height>32</height>

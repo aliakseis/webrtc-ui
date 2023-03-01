@@ -140,17 +140,7 @@ void get_device_header(GstDevice * device, T& desc)
 
     bool has_id = false;
 
-    if (auto props = gst_device_get_properties(device))
-    {
-        if (const char * path = gst_structure_get_string(props, "device.path"))
-        {
-            desc.id = path;
-            has_id = true;
-        }
-        gst_structure_free(props);
-    }
-    if (has_id) {}
-    else if (auto element = gst_device_create_element(device, nullptr))
+    if (auto element = gst_device_create_element(device, nullptr))
     {
         GValue value = G_VALUE_INIT;
         g_object_get_property(G_OBJECT(element), "device-path", &value);
@@ -163,6 +153,18 @@ void get_device_header(GstDevice * device, T& desc)
         }
         g_value_unset(&value);
         gst_object_unref(element);
+    }
+    if (has_id) {}
+    else if (auto props = gst_device_get_properties(device))
+    {
+        for (auto v : {"device.path", "device.id", "device.guid", "device.strid"})
+            if (const char * path = gst_structure_get_string(props, v))
+            {
+                desc.id = path;
+                has_id = true;
+                break;
+            }
+        gst_structure_free(props);
     }
 
     auto name = gst_device_get_display_name(device);
