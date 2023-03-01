@@ -24,5 +24,12 @@ struct CameraDesc
     std::vector<CameraMode> modes;
 };
 
-std::vector<CameraDesc> getCameraDescriptions();
+struct AudioDesc
+{
+    QString id;
+    QString description;
+    QString launchLine;
+};
 
+std::vector<CameraDesc> getCameraDescriptions();
+std::vector<AudioDesc> getAudioDescriptions();

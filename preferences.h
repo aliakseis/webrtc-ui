@@ -20,13 +20,17 @@ public:
 private slots:
     void on_pushButton_update_camera_list_clicked();
     void on_comboBox_camera_currentIndexChanged(int index);
+    void on_pushButton_update_audio_list_clicked();
+    void on_comboBox_audio_currentIndexChanged(int index);
 
 private:
     QStringList updateCameraInfo();
+    QStringList updateAudioInfo();
 
 private:
     Ui::Preferences *ui;
     std::vector<CameraDesc> mCameras;
+    std::vector<AudioDesc> mAudios;
 };
 
 #endif // PREFERENCES_H

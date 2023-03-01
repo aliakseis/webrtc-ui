@@ -8,6 +8,7 @@ Preferences::Preferences(QWidget *parent) :
     ui->setupUi(this);
 
     on_pushButton_update_camera_list_clicked();
+    on_pushButton_update_audio_list_clicked();
 }
 
 Preferences::~Preferences()
@@ -24,6 +25,19 @@ QStringList Preferences::updateCameraInfo()
     for (const auto& cameraInfo : mCameras)
     {
         res.push_back(cameraInfo.id);
+    }
+
+    return res;
+}
+
+QStringList Preferences::updateAudioInfo()
+{
+    QStringList res;
+
+    mAudios = getAudioDescriptions();
+    for (const auto& audioInfo : mAudios)
+    {
+        res.push_back(audioInfo.id);
     }
 
     return res;
@@ -60,6 +74,31 @@ void Preferences::on_comboBox_camera_currentIndexChanged(int index)
         {
             ui->comboBox_camera_res->addItem(mode.getDescr());
         }
+    }
+}
 
+void Preferences::on_pushButton_update_audio_list_clicked()
+{
+    ui->comboBox_audio->clear();
+    ui->comboBox_audio->addItems( updateAudioInfo() );
+}
+
+void Preferences::on_comboBox_audio_currentIndexChanged(int index)
+{
+    if( mAudios.empty() ) {
+        return;
+    }
+
+    if( index>mAudios.size()-1  ) {
+        return;
+    }
+
+    if( index<0 )
+    {
+        ui->label_audio->setText( tr("No audio info") );
+    }
+    else
+    {
+        ui->label_audio->setText(mAudios.at(index).description);
     }
 }

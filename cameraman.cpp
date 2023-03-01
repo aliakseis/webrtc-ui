@@ -131,11 +131,9 @@ void unescape_value_string(gchar * s)
     *w = 0;
 }
 
-
-void print_device(GstDevice * device, std::vector<CameraDesc>& result)
+template<typename T>
+void get_device_header(GstDevice * device, T& desc)
 {
-    CameraDesc desc;
-
     auto str = get_launch_line(device);
     desc.launchLine = str;
     g_free(str);
@@ -174,7 +172,13 @@ void print_device(GstDevice * device, std::vector<CameraDesc>& result)
         desc.id = name;
     }
     g_free(name);
+}
 
+void print_device(GstDevice * device, std::vector<CameraDesc>& result)
+{
+    CameraDesc desc;
+
+    get_device_header(device, desc);
 
     if (auto caps = gst_device_get_caps(device))
     {
@@ -239,15 +243,24 @@ void print_device(GstDevice * device, std::vector<CameraDesc>& result)
     result.push_back(std::move(desc));
 }
 
+void print_device(GstDevice * device, std::vector<AudioDesc>& result)
+{
+    AudioDesc desc;
+
+    get_device_header(device, desc);
+
+    result.push_back(std::move(desc));
+}
+
 // https://github.com/huskyroboticsteam/Orpheus/blob/084ccacf19f520836f15db4abb37f678d3f20993/Rover/GStreamer/device-scanner.cpp
-GstDeviceMonitor *device_monitor()
+GstDeviceMonitor *device_monitor(const char *media_type, const gchar* classes)
 {
     // starts the monitor for the devices 
     auto monitor = gst_device_monitor_new();
 
     // adds a filter to scan for only video devices
-    auto caps = gst_caps_new_empty_simple("video/x-raw");
-    gst_device_monitor_add_filter(monitor, "Video/Source", caps);
+    auto caps = gst_caps_new_empty_simple(media_type);
+    gst_device_monitor_add_filter(monitor, classes, caps);
     gst_caps_unref(caps);
 
     return monitor;
@@ -260,7 +273,26 @@ std::vector<CameraDesc> getCameraDescriptions()
     std::vector<CameraDesc> result;
 
     // create the monitor
-    auto monitor = device_monitor();
+    auto monitor = device_monitor("video/x-raw", "Video/Source");
+    auto dev = gst_device_monitor_get_devices(monitor);
+
+    // loop for the lists
+    for (GList *cur = g_list_first(dev); cur != nullptr; cur = g_list_next(cur))
+    {
+        auto * device = static_cast<GstDevice *>(cur->data);
+        print_device(device, result);
+    }
+    gst_object_unref(monitor);
+
+    return result;
+}
+
+std::vector<AudioDesc> getAudioDescriptions()
+{
+    std::vector<AudioDesc> result;
+
+    // create the monitor
+    auto monitor = device_monitor("audio/x-raw", "Audio/Source");
     auto dev = gst_device_monitor_get_devices(monitor);
 
     // loop for the lists
