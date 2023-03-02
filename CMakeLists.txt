@@ -46,6 +46,9 @@ message("GSTREAMER_LIBRARY_DIRS: ${GSTREAMER_LIBRARY_DIRS}")
 
 link_directories(${GSTREAMER_LIBRARY_DIRS})
 
+find_package(crossguid CONFIG REQUIRED)
+
+find_package(curl CONFIG REQUIRED)
 
 
 
@@ -70,6 +73,12 @@ if(ANDROID)
     preferences.ui
     cameraman.cpp
     cameraman.h
+    http.cpp
+    http.h
+    sendrecv.cpp
+    sendrecv.h
+#    signaling_connection.cpp
+#    signaling_connection.h  
     ${QRCS}
   )
 else()
@@ -87,10 +96,16 @@ else()
     preferences.ui
     cameraman.cpp
     cameraman.h
+    http.cpp
+    http.h
+    sendrecv.cpp
+    sendrecv.h
+#    signaling_connection.cpp
+#    signaling_connection.h  
     ${QRCS}
   )
 endif()
 
 target_include_directories(webrtc-ui PUBLIC ${GSTREAMER_INCLUDE_DIRS})
 
-target_link_libraries(webrtc-ui PRIVATE Qt${QT_VERSION_MAJOR}::Widgets ${GSTREAMER_LIBRARIES})
+target_link_libraries(webrtc-ui PRIVATE Qt${QT_VERSION_MAJOR}::Widgets ${GSTREAMER_LIBRARIES} crossguid CURL::libcurl)
