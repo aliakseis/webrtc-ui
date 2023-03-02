@@ -27,6 +27,8 @@ private:
     QStringList updateCameraInfo();
     QStringList updateAudioInfo();
 
+    void accept() override;
+
 private:
     Ui::Preferences *ui;
     std::vector<CameraDesc> mCameras;
