@@ -4,6 +4,8 @@
 #include "maintoolbar.h"
 #include "preferences.h"
 
+#include "sendrecv.h"
+
 #include <QMessageBox>
 
 MainWindow::MainWindow(QWidget *parent)
@@ -28,7 +30,9 @@ MainWindow::~MainWindow()
 }
 
 void MainWindow::onRingingCall()
-{}
+{
+    start_sendrecv(ui->centralwidget->winId());
+}
 
 void MainWindow::onHangUp()
 {}

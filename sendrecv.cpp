@@ -1,3 +1,4 @@
+#include "sendrecv.h"
 /*
  * Demo gstreamer app for negotiating and streaming a sendrecv webrtc stream
  * with a browser JS app.
@@ -13,6 +14,7 @@
 #define GST_USE_UNSTABLE_API
 #include <gst/webrtc/webrtc.h>
 
+#include <gst/video/videooverlay.h>
 
 /* For signalling */
 #include "http.h"
@@ -110,6 +112,7 @@ static void on_server_message(const gchar *text);
 static gboolean
 start_pipeline(gboolean create_offer);
 
+static guintptr xwinid;
 
 ////////////////////////////////////////////////////////////////////
 
@@ -333,21 +336,79 @@ get_string_from_json_object (JsonObject * object)
   return text;
 }
 
+
+
+
+#define DEFAULT_VIDEOSINK "d3d11videosink"
+
+/* slightly convoluted way to find a working video sink that's not a bin,
+ * one could use autovideosink from gst-plugins-good instead
+ */
+static GstElement *
+find_video_sink ()
+{
+  GstStateChangeReturn sret;
+  GstElement *sink;
+
+  if ((sink = gst_element_factory_make ("xvimagesink", NULL))) {
+    sret = gst_element_set_state (sink, GST_STATE_READY);
+    if (sret == GST_STATE_CHANGE_SUCCESS)
+      return sink;
+
+    gst_element_set_state (sink, GST_STATE_NULL);
+    gst_object_unref (sink);
+  }
+
+  if ((sink = gst_element_factory_make ("ximagesink", NULL))) {
+    sret = gst_element_set_state (sink, GST_STATE_READY);
+    if (sret == GST_STATE_CHANGE_SUCCESS)
+      return sink;
+
+    gst_element_set_state (sink, GST_STATE_NULL);
+    gst_object_unref (sink);
+  }
+
+  if (strcmp (DEFAULT_VIDEOSINK, "xvimagesink") == 0 ||
+      strcmp (DEFAULT_VIDEOSINK, "ximagesink") == 0)
+    return NULL;
+
+  if ((sink = gst_element_factory_make (DEFAULT_VIDEOSINK, NULL))) {
+    if (GST_IS_BIN (sink)) {
+      gst_object_unref (sink);
+      return NULL;
+    }
+
+    sret = gst_element_set_state (sink, GST_STATE_READY);
+    if (sret == GST_STATE_CHANGE_SUCCESS)
+      return sink;
+
+    gst_element_set_state (sink, GST_STATE_NULL);
+    gst_object_unref (sink);
+  }
+
+  return NULL;
+}
+
+
+
+
+
 static void
 handle_media_stream (GstPad * pad, GstElement * pipe, const char *convert_name,
-    const char *sink_name)
+    //const char *sink_name)
+                     GstElement* sink)
 {
   GstPad *qpad;
-  GstElement *q, *conv, *resample, *sink;
+  GstElement *q, *conv, *resample;//, *sink;
   GstPadLinkReturn ret;
 
-  gst_println ("Trying to handle stream with %s ! %s", convert_name, sink_name);
+  //gst_println ("Trying to handle stream with %s ! %s", convert_name, sink_name);
 
   q = gst_element_factory_make ("queue", nullptr);
   g_assert_nonnull (q);
   conv = gst_element_factory_make (convert_name, nullptr);
   g_assert_nonnull (conv);
-  sink = gst_element_factory_make (sink_name, nullptr);
+  //sink = gst_element_factory_make (sink_name, nullptr);
   g_assert_nonnull (sink);
 
   if (g_strcmp0 (convert_name, "audioconvert") == 0) {
@@ -392,9 +453,11 @@ on_incoming_decodebin_stream (GstElement * decodebin, GstPad * pad,
   name = gst_structure_get_name (gst_caps_get_structure (caps, 0));
 
   if (g_str_has_prefix (name, "video")) {
-    handle_media_stream (pad, pipe, "videoconvert", "autovideosink");
+    auto sink = find_video_sink();
+    handle_media_stream (pad, pipe, "videoconvert", sink);//"autovideosink");
+    gst_video_overlay_set_window_handle (GST_VIDEO_OVERLAY (sink), xwinid);
   } else if (g_str_has_prefix (name, "audio")) {
-    handle_media_stream (pad, pipe, "audioconvert", "autoaudiosink");
+    handle_media_stream (pad, pipe, "audioconvert", gst_element_factory_make("autoaudiosink", nullptr));
   } else {
     gst_printerr ("Unknown pad %s, ignoring", GST_PAD_NAME (pad));
   }
@@ -988,11 +1051,14 @@ static gpointer glibMainLoopThreadFunc(gpointer)
 }
 
 
-bool start_sendrecv()
+bool start_sendrecv(unsigned long long winid)
 {
     if (loop == 0) {
         if (!check_plugins ())
             return false;
+
+        xwinid = winid;
+
         gthread = g_thread_new(0, glibMainLoopThreadFunc, 0);
     }
 
