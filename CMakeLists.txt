@@ -58,6 +58,7 @@ qt5_add_resources(QRCS resources.qrc)
 if(ANDROID)
   add_library(webrtc-ui SHARED
     main.cpp
+    globals.h
     mainwindow.cpp
     mainwindow.h
     mainwindow.ui
@@ -74,6 +75,7 @@ if(ANDROID)
 else()
   add_executable(webrtc-ui
     main.cpp
+    globals.h
     mainwindow.cpp
     mainwindow.h
     mainwindow.ui

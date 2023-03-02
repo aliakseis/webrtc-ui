@@ -1,9 +1,10 @@
 #include "preferences.h"
 #include "ui_preferences.h"
 
-#include <QSettings>
+#include "globals.h"
 
-const auto SETTING_SESSION_ID = QStringLiteral("sessionId");
+#include <QSettings>
+#include <QDebug>
 
 const auto SETTING_AUTOVIDEOSRC = QStringLiteral("autovideosrc");
 const auto SETTING_AUTOAUDIOSRC = QStringLiteral("autoaudiosrc");
@@ -148,9 +149,39 @@ void Preferences::accept()
     settings.setValue(SETTING_AUTOAUDIOSRC, ui->autoAudioSrc->isChecked());
 
     settings.setValue(SETTING_CAMERA_ID, ui->comboBox_camera->currentText());
-    settings.setValue(SETTING_CAMERA_RESOLUTION, ui->comboBox_camera->currentIndex());
+    settings.setValue(SETTING_CAMERA_RESOLUTION, ui->comboBox_camera_res->currentIndex());
 
     settings.setValue(SETTING_AUDIO_ID, ui->comboBox_audio->currentText());
+
+    QString videoLaunchLine = VIDEO_LAUNCH_LINE_DEFAULT;
+    if (!ui->autoVideoSrc->isChecked())
+    {
+        const int videoIndex = ui->comboBox_camera->currentIndex();
+        const int videoResIndex = ui->comboBox_camera_res->currentIndex();
+        if (videoIndex >= 0 && videoResIndex >= 0)
+        {
+            const auto& camera = mCameras.at(videoIndex);
+            const auto& mode = camera.modes.at(videoResIndex);
+            videoLaunchLine = QStringLiteral(
+                        "%1 ! video/x-raw,format=%2,width=%3,height=%4,framerate=%5/%6")
+                    .arg(camera.launchLine).arg(mode.format).arg(mode.w).arg(mode.h).arg(mode.den).arg(mode.num);
+        }
+    }
+    settings.setValue(SETTING_VIDEO_LAUNCH_LINE, videoLaunchLine);
+    qDebug() << SETTING_VIDEO_LAUNCH_LINE << videoLaunchLine;
+
+    QString audioLaunchLine = AUDIO_LAUNCH_LINE_DEFAULT;
+    if (!ui->autoAudioSrc->isChecked())
+    {
+        const int audioIndex = ui->comboBox_audio->currentIndex();
+        if (audioIndex >= 0)
+        {
+            const auto& audio = mAudios.at(audioIndex);
+            audioLaunchLine = audio.launchLine;
+        }
+    }
+    settings.setValue(SETTING_AUDIO_LAUNCH_LINE, audioLaunchLine);
+    qDebug() << SETTING_AUDIO_LAUNCH_LINE << audioLaunchLine;
 
     QDialog::accept();
 }
