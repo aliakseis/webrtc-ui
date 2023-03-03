@@ -17,13 +17,10 @@
 #include <gst/video/videooverlay.h>
 
 /* For signalling */
-#include "http.h"
-
-//#include <libsoup/soup.h>
+#include "signaling_connection.h"
 
 #include <json-glib/json-glib.h>
 
-#include <crossguid/guid.hpp>
 
 #include "globals.h"
 
@@ -34,30 +31,8 @@
 #include <string>
 #include <string_view>
 
-#include <future>
 #include <atomic>
 #include <memory>
-
-enum AppState
-{
-  APP_STATE_UNKNOWN = 0,
-  APP_STATE_ERROR = 1,          /* generic error */
-  SERVER_CONNECTING = 1000,
-  SERVER_CONNECTION_ERROR,
-  SERVER_CONNECTED,             /* Ready to register */
-  SERVER_REGISTERING = 2000,
-  SERVER_REGISTRATION_ERROR,
-  SERVER_REGISTERED,            /* Ready to call a peer */
-  SERVER_CLOSED,                /* server connection closed by us or the server */
-  PEER_CONNECTING = 3000,
-  PEER_CONNECTION_ERROR,
-  PEER_CONNECTED,
-  PEER_CALL_NEGOTIATING = 4000,
-  PEER_CALL_STARTED,
-  PEER_CALL_STOPPING,
-  PEER_CALL_STOPPED,
-  PEER_CALL_ERROR,
-};
 
 #define GST_CAT_DEFAULT webrtc_sendrecv_debug
 GST_DEBUG_CATEGORY_STATIC (GST_CAT_DEFAULT);
@@ -66,7 +41,7 @@ static GMainLoop *loop;
 static GstElement *pipe1, *webrtc1 = nullptr;
 static GObject *send_channel, *receive_channel;
 
-static AppState app_state = APP_STATE_UNKNOWN;
+AppState app_state = APP_STATE_UNKNOWN;
 
 
 //static gchar *session_id = nullptr;
@@ -104,201 +79,18 @@ const static gboolean remote_is_offerer = FALSE;
 //};
 
 
-static gboolean
-cleanup_and_quit_loop(const gchar * msg, enum AppState state);
-
-static void on_server_message(const gchar *text);
-
-static gboolean
-start_pipeline(gboolean create_offer);
-
 static guintptr xwinid;
 
 ////////////////////////////////////////////////////////////////////
 
-struct ISignalingConnection {
-    virtual bool connect_to_server_async() = 0;
-    virtual bool we_create_offer() = 0;
-    virtual void send_text(gchar *text) = 0;
-    virtual void close() = 0;
-};
 
 std::unique_ptr<ISignalingConnection> signaling_connection;
-
-
-const xg::Guid this_guid = xg::newGuid();
-
-xg::Guid their_giud;
-
-std::thread signaling_runner;
-
-static std::atomic_bool requestInterrupted = false;
-
-const char send_message_url[] = "https://ntfy.sh/mediaThorSendRecv_%s";
-const char recv_message_url[] = "https://ntfy.sh/mediaThorSendRecv_%s/sse";
-
-
-class NtfySignalingConnection : public ISignalingConnection
-{
-protected:
-    bool we_create_offer() override
-    {
-        return this_guid.bytes() < their_giud.bytes();
-    }
-
-    void send_text(gchar *text) override
-    {
-        const auto message = this_guid.str() + '\n' + text;
-
-        char buffer[1024];
-        sprintf(buffer, send_message_url, QSettings().value(SETTING_SESSION_ID).toString().toStdString().c_str());
-        http(HTTP_POST, buffer, nullptr, message.c_str(), message.length());
-    }
-
-    static const char* verify_sse_response(CURL* curl) {
-#define EXPECTED_CONTENT_TYPE "text/event-stream"
-
-        static const char expected_content_type[] = EXPECTED_CONTENT_TYPE;
-
-        const char* content_type;
-        curl_easy_getinfo(curl, CURLINFO_CONTENT_TYPE, &content_type);
-        if (!content_type) content_type = "";
-
-        if (!strncmp(content_type, expected_content_type, strlen(expected_content_type)))
-            return nullptr;
-
-        return "Invalid content_type, should be '" EXPECTED_CONTENT_TYPE "'.";
-    }
-
-    bool connect_to_server_async() override
-    {
-        std::promise<bool> startedPromise;
-
-        auto startedResult = startedPromise.get_future();
-
-        auto threadLam = [this](
-            std::promise<bool> startedPromise
-            ) {
-                const char* headers[] = {
-                    "Accept: text/event-stream",
-                    nullptr
-                };
-
-                auto on_data = [this, &startedPromise](char *ptr, size_t size, size_t nmemb)->size_t {
-                    try {
-                        const auto ptrEnd = ptr + size * nmemb;
-
-                        const char watch[] = "data:";
-
-                        auto pData = std::search(ptr, ptrEnd, std::begin(watch), std::prev(std::end(watch)));
-                        if (pData != ptrEnd) do {
-                            pData += sizeof(watch) / sizeof(watch[0]) - 1;
-
-                            JsonParser *parser = json_parser_new();
-                            if (!json_parser_load_from_data(parser, pData, ptrEnd - pData, nullptr)) {
-                                //gst_printerr("Unknown message '%s', ignoring\n", text);
-                                g_object_unref(parser);
-                                break; //goto out;
-                            }
-
-                            auto root = json_parser_get_root(parser);
-                            if (!JSON_NODE_HOLDS_OBJECT(root)) {
-                                //gst_printerr("Unknown json message '%s', ignoring\n", text);
-                                g_object_unref(parser);
-                                break; //goto out;
-                            }
-
-                            auto child = json_node_get_object(root);
-
-                            if (!json_object_has_member(child, "event")) {
-                                g_object_unref(parser);
-                                break; //goto out;
-                            }
-
-                            auto sdptype = json_object_get_string_member(child, "event");
-                            if (g_str_equal(sdptype, "open")) {
-                                startedPromise.set_value(true);
-                            }
-                            else if (g_str_equal(sdptype, "message")) {
-                                auto text = json_object_get_string_member(child, "message");
-
-                                if (auto pos = strchr(text, '\n'); pos != nullptr && pos != text)
-                                {
-                                    std::string_view sender_guid(text, pos - text);
-                                    if (this_guid.str() != sender_guid)
-                                    {
-                                        if (!their_giud.isValid())
-                                            their_giud = std::string(sender_guid);
-
-                                        const auto message = pos + 1;
-                                        const bool is_syn = g_strcmp0(message, "SYN") == 0;
-                                        if (is_syn)
-                                            send_text("ACK");
-
-                                        if (is_syn || g_strcmp0(message, "ACK") == 0) {
-                                            if (app_state < PEER_CONNECTED) {
-                                                app_state = PEER_CONNECTED;
-                                                /* Start negotiation (exchange SDP and ICE candidates) */
-                                                if (we_create_offer() && !start_pipeline(TRUE))
-                                                    cleanup_and_quit_loop("ERROR: failed to start pipeline",
-                                                        PEER_CALL_ERROR);
-                                            }
-                                        }
-                                        else
-                                            on_server_message(message);
-                                    }
-                                }
-                            }
-
-                            g_object_unref(parser);
-
-                        } while (false);
-                    }
-                    catch (const std::exception&) {
-                        startedPromise.set_value(false);
-                        requestInterrupted = true;
-                    }
-                    return size * nmemb;
-                };
-
-                auto progress_callback = [](curl_off_t dltotal,
-                    curl_off_t dlnow,
-                    curl_off_t ultotal,
-                    curl_off_t ulnow)->size_t {
-                        return requestInterrupted;
-                };
-
-                char buffer[1024];
-                sprintf(buffer, recv_message_url, QSettings().value(SETTING_SESSION_ID).toString().toStdString().c_str());
-                http(HTTP_GET, buffer, headers, nullptr, 0, on_data, verify_sse_response, progress_callback);
-        };
-
-        // https://stackoverflow.com/a/23454840/10472202
-        signaling_runner = std::thread(threadLam, std::move(startedPromise));
-
-        if (!startedResult.get())
-            return false;
-
-        send_text("SYN");
-
-        return true;
-    }
-
-    void close() override
-    {
-        if (signaling_runner.joinable())
-        {
-            requestInterrupted = true;
-            signaling_runner.join();
-        }
-    }
-};
 
 
 ////////////////////////////////////////////////////////////////////
 
 
-static gboolean
+gboolean
 cleanup_and_quit_loop (const gchar * msg, enum AppState state)
 {
   if (msg)
@@ -706,7 +498,7 @@ webrtcbin_get_stats (GstElement * webrtcbin)
 
 #define RTP_TWCC_URI "http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01"
 
-static gboolean
+gboolean
 start_pipeline (gboolean create_offer)
 {
   GstStateChangeReturn ret;
@@ -867,7 +659,7 @@ on_offer_received (GstSDPMessage * sdp)
 }
 
 /* One mega message handler for our asynchronous calling mechanism */
-static void on_server_message(const gchar *text) {
+void on_server_message(const gchar *text) {
   if (g_strcmp0 (text, "OFFER_REQUEST") == 0) {
     if (app_state != SERVER_REGISTERED) {
       gst_printerr ("Received OFFER_REQUEST at a strange time, ignoring\n");
@@ -1028,7 +820,7 @@ GThread *gthread = 0;
 
 static gpointer glibMainLoopThreadFunc(gpointer)
 {
-    signaling_connection = std::make_unique<NtfySignalingConnection>();
+    signaling_connection = get_signaling_connection();
 
     loop = g_main_loop_new(0, false);
 

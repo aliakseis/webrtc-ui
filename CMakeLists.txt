@@ -77,8 +77,8 @@ if(ANDROID)
     http.h
     sendrecv.cpp
     sendrecv.h
-#    signaling_connection.cpp
-#    signaling_connection.h  
+    signaling_connection.cpp
+    signaling_connection.h  
     ${QRCS}
   )
 else()
@@ -100,8 +100,8 @@ else()
     http.h
     sendrecv.cpp
     sendrecv.h
-#    signaling_connection.cpp
-#    signaling_connection.h  
+    signaling_connection.cpp
+    signaling_connection.h  
     ${QRCS}
   )
 endif()
