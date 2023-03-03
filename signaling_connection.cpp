@@ -14,6 +14,7 @@
 
 #include <thread>
 #include <future>
+#include <mutex>
 
 const xg::Guid this_guid = xg::newGuid();
 
@@ -178,11 +179,13 @@ protected:
     }
     void doClose()
     {
-        if (signaling_runner.joinable())
-        {
-            requestInterrupted = true;
-            signaling_runner.join();
-        }
+        std::call_once(once_closed, [this] {
+            if (signaling_runner.joinable())
+            {
+                requestInterrupted = true;
+                signaling_runner.join();
+            }
+        });
     }
 
 private:
@@ -191,6 +194,7 @@ private:
     std::thread signaling_runner;
 
     std::atomic_bool requestInterrupted = false;
+    std::once_flag once_closed;
 };
 
 std::unique_ptr<ISignalingConnection> get_signaling_connection()

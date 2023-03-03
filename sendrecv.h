@@ -21,6 +21,7 @@ enum AppState
   PEER_CALL_STOPPING,
   PEER_CALL_STOPPED,
   PEER_CALL_ERROR,
+  HANG_UP
 };
 
 extern AppState app_state;

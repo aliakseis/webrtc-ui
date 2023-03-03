@@ -35,7 +35,9 @@ void MainWindow::onRingingCall()
 }
 
 void MainWindow::onHangUp()
-{}
+{
+    cleanup_and_quit_loop("hand up", HANG_UP);
+}
 
 void MainWindow::onHelp()
 {
