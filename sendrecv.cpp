@@ -43,6 +43,7 @@ static GObject *send_channel, *receive_channel;
 
 AppState app_state = APP_STATE_UNKNOWN;
 
+static guint webrtcbin_get_stats_id = 0;
 
 const static gboolean remote_is_offerer = FALSE;
 
@@ -65,6 +66,9 @@ cleanup_and_quit_loop (const gchar * msg, enum AppState state)
     gst_printerr ("%s\n", msg);
   if (state > 0)
     app_state = state;
+
+  g_source_remove(webrtcbin_get_stats_id);
+  webrtcbin_get_stats_id = 0;
 
   signaling_connection->close();
 
@@ -435,7 +439,7 @@ on_webrtcbin_get_stats (GstPromise * promise, GstElement * webrtcbin)
   stats = gst_promise_get_reply (promise);
   gst_structure_foreach (stats, on_webrtcbin_stat, nullptr);
 
-  g_timeout_add (100, (GSourceFunc) webrtcbin_get_stats, webrtcbin);
+  webrtcbin_get_stats_id = g_timeout_add (100, (GSourceFunc) webrtcbin_get_stats, webrtcbin);
 }
 
 static gboolean
@@ -545,7 +549,7 @@ start_pipeline (gboolean create_offer)
   /* Lifetime is the same as the pipeline itself */
   gst_object_unref (webrtc1);
 
-  g_timeout_add (100, (GSourceFunc) webrtcbin_get_stats, webrtc1);
+  webrtcbin_get_stats_id = g_timeout_add (100, (GSourceFunc) webrtcbin_get_stats, webrtc1);
 
   gst_print ("Starting pipeline\n");
   ret = gst_element_set_state (GST_ELEMENT (pipe1), GST_STATE_PLAYING);
@@ -776,12 +780,16 @@ static gpointer glibMainLoopThreadFunc(gpointer)
     g_main_loop_unref(loop);
     loop = nullptr;
 
+    g_source_remove(webrtcbin_get_stats_id);
+    webrtcbin_get_stats_id = 0;
+
     if (pipe1) {
       gst_element_set_state (GST_ELEMENT (pipe1), GST_STATE_NULL);
       gst_print ("Pipeline stopped\n");
       gst_object_unref (pipe1);
       pipe1 = nullptr;
     }
+    webrtc1 = nullptr;
 
     signaling_connection.reset();
 
