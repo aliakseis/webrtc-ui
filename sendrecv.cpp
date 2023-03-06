@@ -110,7 +110,7 @@ find_video_sink ()
   GstStateChangeReturn sret;
   GstElement *sink;
 
-  if ((sink = gst_element_factory_make ("xvimagesink", NULL))) {
+  if ((sink = gst_element_factory_make ("xvimagesink", nullptr))) {
     sret = gst_element_set_state (sink, GST_STATE_READY);
     if (sret == GST_STATE_CHANGE_SUCCESS)
       return sink;
@@ -119,7 +119,7 @@ find_video_sink ()
     gst_object_unref (sink);
   }
 
-  if ((sink = gst_element_factory_make ("ximagesink", NULL))) {
+  if ((sink = gst_element_factory_make ("ximagesink", nullptr))) {
     sret = gst_element_set_state (sink, GST_STATE_READY);
     if (sret == GST_STATE_CHANGE_SUCCESS)
       return sink;
@@ -130,12 +130,12 @@ find_video_sink ()
 
   if (strcmp (DEFAULT_VIDEOSINK, "xvimagesink") == 0 ||
       strcmp (DEFAULT_VIDEOSINK, "ximagesink") == 0)
-    return NULL;
+    return nullptr;
 
-  if ((sink = gst_element_factory_make (DEFAULT_VIDEOSINK, NULL))) {
+  if ((sink = gst_element_factory_make (DEFAULT_VIDEOSINK, nullptr))) {
     if (GST_IS_BIN (sink)) {
       gst_object_unref (sink);
-      return NULL;
+      return nullptr;
     }
 
     sret = gst_element_set_state (sink, GST_STATE_READY);
@@ -146,7 +146,7 @@ find_video_sink ()
     gst_object_unref (sink);
   }
 
-  return NULL;
+  return nullptr;
 }
 
 
@@ -158,15 +158,11 @@ handle_media_stream (GstPad * pad, GstElement * pipe, const char *convert_name,
     //const char *sink_name)
                      GstElement* sink)
 {
-  GstPad *qpad;
-  GstElement *q, *conv, *resample;//, *sink;
-  GstPadLinkReturn ret;
-
   //gst_println ("Trying to handle stream with %s ! %s", convert_name, sink_name);
 
-  q = gst_element_factory_make ("queue", nullptr);
+  auto q = gst_element_factory_make ("queue", nullptr);
   g_assert_nonnull (q);
-  conv = gst_element_factory_make (convert_name, nullptr);
+  auto conv = gst_element_factory_make (convert_name, nullptr);
   g_assert_nonnull (conv);
   //sink = gst_element_factory_make (sink_name, nullptr);
   g_assert_nonnull (sink);
@@ -174,7 +170,7 @@ handle_media_stream (GstPad * pad, GstElement * pipe, const char *convert_name,
   if (g_strcmp0 (convert_name, "audioconvert") == 0) {
     /* Might also need to resample, so add it just in case.
      * Will be a no-op if it's not required. */
-    resample = gst_element_factory_make ("audioresample", nullptr);
+    auto resample = gst_element_factory_make ("audioresample", nullptr);
     g_assert_nonnull (resample);
     gst_bin_add_many (GST_BIN (pipe), q, conv, resample, sink, NULL);
     gst_element_sync_state_with_parent (q);
@@ -190,9 +186,9 @@ handle_media_stream (GstPad * pad, GstElement * pipe, const char *convert_name,
     gst_element_link_many (q, conv, sink, NULL);
   }
 
-  qpad = gst_element_get_static_pad (q, "sink");
+  auto qpad = gst_element_get_static_pad (q, "sink");
 
-  ret = gst_pad_link (pad, qpad);
+  auto ret = gst_pad_link (pad, qpad);
   g_assert_cmphex (ret, ==, GST_PAD_LINK_OK);
 }
 
@@ -247,20 +243,17 @@ static void
 send_ice_candidate_message (GstElement * webrtc G_GNUC_UNUSED, guint mlineindex,
     gchar * candidate, gpointer user_data G_GNUC_UNUSED)
 {
-  gchar *text;
-  JsonObject *ice, *msg;
-
   if (app_state < PEER_CALL_NEGOTIATING) {
     cleanup_and_quit_loop ("Can't send ICE, not in call", APP_STATE_ERROR);
     return;
   }
 
-  ice = json_object_new ();
+  auto ice = json_object_new ();
   json_object_set_string_member (ice, "candidate", candidate);
   json_object_set_int_member (ice, "sdpMLineIndex", mlineindex);
-  msg = json_object_new ();
+  auto msg = json_object_new ();
   json_object_set_object_member (msg, "ice", ice);
-  text = get_string_from_json_object (msg);
+  auto text = get_string_from_json_object (msg);
   json_object_unref (msg);
 
   signaling_connection->send_text(text);
@@ -270,17 +263,14 @@ send_ice_candidate_message (GstElement * webrtc G_GNUC_UNUSED, guint mlineindex,
 static void
 send_sdp_to_peer (GstWebRTCSessionDescription * desc)
 {
-  gchar *text;
-  JsonObject *msg, *sdp;
-
   if (app_state < PEER_CALL_NEGOTIATING) {
     cleanup_and_quit_loop ("Can't send SDP to peer, not in call",
         APP_STATE_ERROR);
     return;
   }
 
-  text = gst_sdp_message_as_text (desc->sdp);
-  sdp = json_object_new ();
+  auto text = gst_sdp_message_as_text (desc->sdp);
+  auto sdp = json_object_new ();
 
   if (desc->type == GST_WEBRTC_SDP_TYPE_OFFER) {
     gst_print ("Sending offer:\n%s\n", text);
@@ -295,7 +285,7 @@ send_sdp_to_peer (GstWebRTCSessionDescription * desc)
   json_object_set_string_member (sdp, "sdp", text);
   g_free (text);
 
-  msg = json_object_new ();
+  auto msg = json_object_new ();
   json_object_set_object_member (msg, "sdp", sdp);
   text = get_string_from_json_object (msg);
   json_object_unref (msg);
@@ -505,21 +495,18 @@ start_pipeline (gboolean create_offer)
     GST_FIXME ("Need to implement header extension negotiation when "
         "reciving a remote offers");
   } else {
-    GstElement *videopay, *audiopay;
-    GstRTPHeaderExtension *video_twcc, *audio_twcc;
-
-    videopay = gst_bin_get_by_name (GST_BIN (pipe1), "videopay");
+    auto videopay = gst_bin_get_by_name (GST_BIN (pipe1), "videopay");
     g_assert_nonnull (videopay);
-    video_twcc = gst_rtp_header_extension_create_from_uri (RTP_TWCC_URI);
+    auto video_twcc = gst_rtp_header_extension_create_from_uri (RTP_TWCC_URI);
     g_assert_nonnull (video_twcc);
     gst_rtp_header_extension_set_id (video_twcc, 1);
     g_signal_emit_by_name (videopay, "add-extension", video_twcc);
     g_clear_object (&video_twcc);
     g_clear_object (&videopay);
 
-    audiopay = gst_bin_get_by_name (GST_BIN (pipe1), "audiopay");
+    auto audiopay = gst_bin_get_by_name (GST_BIN (pipe1), "audiopay");
     g_assert_nonnull (audiopay);
-    audio_twcc = gst_rtp_header_extension_create_from_uri (RTP_TWCC_URI);
+    auto audio_twcc = gst_rtp_header_extension_create_from_uri (RTP_TWCC_URI);
     g_assert_nonnull (audio_twcc);
     gst_rtp_header_extension_set_id (audio_twcc, 1);
     g_signal_emit_by_name (audiopay, "add-extension", audio_twcc);
@@ -660,8 +647,6 @@ void on_server_message(const gchar *text) {
     cleanup_and_quit_loop (text, APP_STATE_UNKNOWN);
   } else {
     /* Look for JSON messages containing SDP and ICE candidates */
-    JsonNode *root;
-    JsonObject *object, *child;
     JsonParser *parser = json_parser_new ();
     if (!json_parser_load_from_data (parser, text, -1, nullptr)) {
       gst_printerr ("Unknown message '%s', ignoring\n", text);
@@ -669,7 +654,7 @@ void on_server_message(const gchar *text) {
       return;
     }
 
-    root = json_parser_get_root (parser);
+    auto root = json_parser_get_root (parser);
     if (!JSON_NODE_HOLDS_OBJECT (root)) {
       gst_printerr ("Unknown json message '%s', ignoring\n", text);
       g_object_unref (parser);
@@ -687,17 +672,12 @@ void on_server_message(const gchar *text) {
       app_state = PEER_CALL_NEGOTIATING;
     }
 
-    object = json_node_get_object (root);
+    auto object = json_node_get_object (root);
     /* Check type of JSON message */
     if (json_object_has_member (object, "sdp")) {
-      int ret;
-      GstSDPMessage *sdp;
-      const gchar *text, *sdptype;
-      GstWebRTCSessionDescription *answer;
-
       g_assert_cmphex (app_state, ==, PEER_CALL_NEGOTIATING);
 
-      child = json_object_get_object_member (object, "sdp");
+      auto child = json_object_get_object_member (object, "sdp");
 
       if (!json_object_has_member (child, "type")) {
         cleanup_and_quit_loop ("ERROR: received SDP without 'type'",
@@ -705,7 +685,7 @@ void on_server_message(const gchar *text) {
         return;
       }
 
-      sdptype = json_object_get_string_member (child, "type");
+      auto sdptype = json_object_get_string_member (child, "type");
       /* In this example, we create the offer and receive one answer by default,
        * but it's possible to comment out the offer creation and wait for an offer
        * instead, so we handle either here.
@@ -713,14 +693,15 @@ void on_server_message(const gchar *text) {
        * See tests/examples/webrtcbidirectional.c in gst-plugins-bad for another
        * example how to handle offers from peers and reply with answers using webrtcbin. */
       text = json_object_get_string_member (child, "sdp");
-      ret = gst_sdp_message_new (&sdp);
+      GstSDPMessage *sdp;
+      auto ret = gst_sdp_message_new (&sdp);
       g_assert_cmphex (ret, ==, GST_SDP_OK);
       ret = gst_sdp_message_parse_buffer ((guint8 *) text, (guint) strlen(text), sdp);
       g_assert_cmphex (ret, ==, GST_SDP_OK);
 
       if (g_str_equal (sdptype, "answer")) {
         gst_print ("Received answer:\n%s\n", text);
-        answer = gst_webrtc_session_description_new (GST_WEBRTC_SDP_TYPE_ANSWER,
+        auto answer = gst_webrtc_session_description_new (GST_WEBRTC_SDP_TYPE_ANSWER,
             sdp);
         g_assert_nonnull (answer);
 
@@ -739,12 +720,9 @@ void on_server_message(const gchar *text) {
       }
 
     } else if (json_object_has_member (object, "ice")) {
-      const gchar *candidate;
-      gint sdpmlineindex;
-
-      child = json_object_get_object_member (object, "ice");
-      candidate = json_object_get_string_member (child, "candidate");
-      sdpmlineindex = (guint)json_object_get_int_member(child, "sdpMLineIndex");
+      auto child = json_object_get_object_member (object, "ice");
+      auto candidate = json_object_get_string_member (child, "candidate");
+      auto sdpmlineindex = (guint)json_object_get_int_member(child, "sdpMLineIndex");
 
       /* Add ice candidate sent by remote peer */
       g_signal_emit_by_name (webrtc1, "add-ice-candidate", sdpmlineindex,
@@ -790,36 +768,36 @@ static gpointer glibMainLoopThreadFunc(gpointer)
 {
     signaling_connection = get_signaling_connection();
 
-    loop = g_main_loop_new(0, false);
+    loop = g_main_loop_new(nullptr, false);
 
     signaling_connection->connect_to_server_async();
 
     g_main_loop_run(loop);
     g_main_loop_unref(loop);
-    loop = 0;
+    loop = nullptr;
 
     if (pipe1) {
       gst_element_set_state (GST_ELEMENT (pipe1), GST_STATE_NULL);
       gst_print ("Pipeline stopped\n");
       gst_object_unref (pipe1);
-      pipe1 = 0;
+      pipe1 = nullptr;
     }
 
     signaling_connection.reset();
 
-    return 0;
+    return nullptr;
 }
 
 
 bool start_sendrecv(unsigned long long winid)
 {
-    if (loop == 0) {
+    if (loop == nullptr) {
         if (!check_plugins ())
             return false;
 
         xwinid = winid;
 
-        gthread = g_thread_new(0, glibMainLoopThreadFunc, 0);
+        gthread = g_thread_new(nullptr, glibMainLoopThreadFunc, nullptr);
     }
 
     return true;

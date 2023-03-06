@@ -21,7 +21,7 @@ static char curl_error_buf[CURL_ERROR_SIZE];
 
 static bool curl_perform(CURL* curl) {
   int retries = 5;
-  while(1) {
+  while(true) {
     CURLcode res = curl_easy_perform(curl);
 
     switch(res) {
@@ -57,7 +57,7 @@ static void curl_log_result(CURL* curl) {
   #define FORMAT_long     "%ld"
   #define FORMAT_double   "%f"
 
-#define curl_info(T, INFO) T INFO; curl_easy_getinfo(curl, CURLINFO_ ## INFO, &INFO); if(!INFO) INFO = DEFAULT_ ## T
+#define curl_info(T, INFO) T INFO; curl_easy_getinfo(curl, CURLINFO_ ## INFO, &(INFO)); if(!(INFO)) (INFO) = DEFAULT_ ## T
 
 #define log_curl_info(T, INFO)  curl_info(T, INFO); \
                                 if(options.verbosity >= 2) { \
@@ -197,7 +197,7 @@ bool http(HttpVerb verb,
   unsigned      bodyLenght,
   
   OnDataFunc    on_data,
-  std::function<const char*(CURL*)> on_verify,
+  const std::function<const char*(CURL*)>& on_verify,
   OnProgressFunc progress_callback)
 {
   CURL *curl = curl_handle(verb);
@@ -210,7 +210,7 @@ bool http(HttpVerb verb,
 
   // -- set headers ---------------------------------------------------
   
-  struct curl_slist *headers = NULL;
+  struct curl_slist *headers = nullptr;
   while(http_headers && *http_headers)
     headers = curl_slist_append(headers, *http_headers++);
 
@@ -264,7 +264,7 @@ bool http(HttpVerb verb,
   // -- verify status code --------------------------------------------
 
   long response_code; 
-  const char* effective_url = 0;
+  const char* effective_url = nullptr;
   
   curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &response_code); 
   if(response_code < 200 || response_code >= 300) {

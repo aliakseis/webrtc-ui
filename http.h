@@ -34,7 +34,7 @@ bool http(HttpVerb  verb,
   unsigned      bodyLenght,
 
   OnDataFunc    on_data = {},
-  std::function<const char*(CURL*)> on_verify = {},
+  const std::function<const char*(CURL*)>& on_verify = {},
   OnProgressFunc progress_callback = {}
 );
 
