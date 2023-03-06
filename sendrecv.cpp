@@ -47,6 +47,7 @@ static guint webrtcbin_get_stats_id = 0;
 
 const static gboolean remote_is_offerer = FALSE;
 
+std::vector<std::pair<int, std::string>> ice_candidates;
 
 static guintptr xwinid;
 
@@ -243,6 +244,7 @@ on_incoming_stream (GstElement * webrtc, GstPad * pad, GstElement * pipe)
   gst_object_unref (sinkpad);
 }
 
+#if 0
 static void
 send_ice_candidate_message (GstElement * webrtc G_GNUC_UNUSED, guint mlineindex,
     gchar * candidate, gpointer user_data G_GNUC_UNUSED)
@@ -263,6 +265,40 @@ send_ice_candidate_message (GstElement * webrtc G_GNUC_UNUSED, guint mlineindex,
   signaling_connection->send_text(text);
   g_free (text);
 }
+#endif
+
+static void
+send_ice_candidate_message(GstElement * webrtc G_GNUC_UNUSED, guint mlineindex,
+    gchar * candidate, gpointer user_data G_GNUC_UNUSED)
+{
+    ice_candidates.push_back({ mlineindex, candidate });
+}
+
+
+static void
+send_candidates()
+{
+    auto ar = json_array_new();
+
+    for (const auto& candidate : ice_candidates)
+    {
+        auto ice = json_object_new();
+        json_object_set_string_member(ice, "candidate", candidate.second.c_str());
+        json_object_set_int_member(ice, "sdpMLineIndex", candidate.first);
+        json_array_add_object_element(ar, ice);
+    }
+
+    ice_candidates.clear();
+
+    auto msg = json_object_new();
+    json_object_set_array_member(msg, "ice", ar);
+    auto text = get_string_from_json_object(msg);
+    json_object_unref(msg);
+
+    signaling_connection->send_text(text);
+    g_free(text);
+}
+
 
 static void
 send_sdp_to_peer (GstWebRTCSessionDescription * desc)
@@ -408,6 +444,7 @@ on_ice_gathering_state_notify (GstElement * webrtcbin, GParamSpec * pspec,
       break;
     case GST_WEBRTC_ICE_GATHERING_STATE_COMPLETE:
       new_state = "complete";
+      send_candidates();
       break;
   }
   gst_print ("ICE gathering state changed to %s\n", new_state);
@@ -724,13 +761,17 @@ void on_server_message(const gchar *text) {
       }
 
     } else if (json_object_has_member (object, "ice")) {
-      auto child = json_object_get_object_member (object, "ice");
-      auto candidate = json_object_get_string_member (child, "candidate");
-      auto sdpmlineindex = (guint)json_object_get_int_member(child, "sdpMLineIndex");
+        auto candidates = json_object_get_array_member(object, "ice");
+        for (auto v = json_array_get_elements(candidates); v != NULL; v = v->next)
+        {
+            auto child = json_node_get_object(static_cast<JsonNode*>(v->data));
+            auto candidate = json_object_get_string_member(child, "candidate");
+            auto sdpmlineindex = (guint)json_object_get_int_member(child, "sdpMLineIndex");
 
-      /* Add ice candidate sent by remote peer */
-      g_signal_emit_by_name (webrtc1, "add-ice-candidate", sdpmlineindex,
-          candidate);
+            /* Add ice candidate sent by remote peer */
+            g_signal_emit_by_name(webrtc1, "add-ice-candidate", sdpmlineindex,
+                candidate);
+        }
     } else {
       gst_printerr ("Ignoring unknown JSON message:\n%s\n", text);
     }
