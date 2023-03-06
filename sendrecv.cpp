@@ -68,10 +68,12 @@ cleanup_and_quit_loop (const gchar * msg, enum AppState state)
   if (state > 0)
     app_state = state;
 
-  g_source_remove(webrtcbin_get_stats_id);
+  if (webrtcbin_get_stats_id)
+    g_source_remove(webrtcbin_get_stats_id);
   webrtcbin_get_stats_id = 0;
 
-  signaling_connection->close();
+  if (signaling_connection)
+    signaling_connection->close();
 
   if (loop) {
     g_main_loop_quit (loop);
@@ -821,7 +823,8 @@ static gpointer glibMainLoopThreadFunc(gpointer)
     g_main_loop_unref(loop);
     loop = nullptr;
 
-    g_source_remove(webrtcbin_get_stats_id);
+    if (webrtcbin_get_stats_id)
+        g_source_remove(webrtcbin_get_stats_id);
     webrtcbin_get_stats_id = 0;
 
     if (pipe1) {

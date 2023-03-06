@@ -26,6 +26,7 @@ MainWindow::MainWindow(QWidget *parent)
 
 MainWindow::~MainWindow()
 {
+    cleanup_and_quit_loop("hand up", HANG_UP);
     delete ui;
 }
 
