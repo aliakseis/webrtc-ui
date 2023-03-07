@@ -849,6 +849,8 @@ bool start_sendrecv(unsigned long long winid)
 
         xwinid = winid;
 
+        app_state = APP_STATE_UNKNOWN;
+
         gthread = g_thread_new(nullptr, glibMainLoopThreadFunc, nullptr);
     }
 

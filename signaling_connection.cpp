@@ -11,6 +11,7 @@
 #include <crossguid/guid.hpp>
 
 #include <QSettings>
+#include <QDebug>
 
 #include <thread>
 #include <future>
@@ -143,9 +144,13 @@ protected:
 
                         } while (false);
                     }
-                    catch (const std::exception&) {
-                        startedPromise.set_value(false);
+                    catch (const std::exception& ex) {
+                        qCritical() << "Exception " << typeid(ex).name() << ": " << ex.what();
                         requestInterrupted = true;
+                        try {
+                            startedPromise.set_value(false);
+                        } catch (...) {
+                        }
                     }
                     return size * nmemb;
                 };
