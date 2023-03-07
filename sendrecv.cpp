@@ -273,7 +273,7 @@ static void
 send_ice_candidate_message(GstElement * webrtc G_GNUC_UNUSED, guint mlineindex,
     gchar * candidate, gpointer user_data G_GNUC_UNUSED)
 {
-    ice_candidates.push_back({ mlineindex, candidate });
+    ice_candidates.emplace_back( mlineindex, candidate );
 }
 
 
@@ -764,7 +764,7 @@ void on_server_message(const gchar *text) {
 
     } else if (json_object_has_member (object, "ice")) {
         auto candidates = json_object_get_array_member(object, "ice");
-        for (auto v = json_array_get_elements(candidates); v != NULL; v = v->next)
+        for (auto v = json_array_get_elements(candidates); v != nullptr; v = v->next)
         {
             auto child = json_node_get_object(static_cast<JsonNode*>(v->data));
             auto candidate = json_object_get_string_member(child, "candidate");
@@ -809,9 +809,9 @@ check_plugins ()
 }
 
 //GMainLoop *gloop = 0;
-GThread *gthread = 0;
+GThread *gthread = nullptr;
 
-static gpointer glibMainLoopThreadFunc(gpointer)
+static gpointer glibMainLoopThreadFunc(gpointer /*unused*/)
 {
     signaling_connection = get_signaling_connection();
 
