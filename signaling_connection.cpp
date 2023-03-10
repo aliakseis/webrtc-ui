@@ -184,13 +184,16 @@ protected:
     }
     void doClose()
     {
-        std::call_once(once_closed, [this] {
-            if (signaling_runner.joinable())
-            {
-                requestInterrupted = true;
-                signaling_runner.join();
-            }
-        });
+        requestInterrupted = true;
+        if (signaling_runner.get_id() != std::this_thread::get_id())
+        {
+            std::call_once(once_closed, [this] {
+                if (signaling_runner.joinable())
+                {
+                    signaling_runner.join();
+                }
+                });
+        }
     }
 
 private:

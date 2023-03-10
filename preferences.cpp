@@ -20,8 +20,10 @@ Preferences::Preferences(QWidget *parent) :
 {
     ui->setupUi(this);
 
+    QApplication::setOverrideCursor(Qt::WaitCursor);
     on_pushButton_update_camera_list_clicked();
     on_pushButton_update_audio_list_clicked();
+    QApplication::restoreOverrideCursor();
 
     QSettings settings;
 
