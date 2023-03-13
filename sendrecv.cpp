@@ -106,7 +106,7 @@ get_string_from_json_object (JsonObject * object)
 
 
 
-#define DEFAULT_VIDEOSINK "d3d11videosink"
+#define DEFAULT_VIDEOSINK "d3dvideosink"
 
 /* slightly convoluted way to find a working video sink that's not a bin,
  * one could use autovideosink from gst-plugins-good instead
@@ -538,23 +538,20 @@ start_pipeline (gboolean create_offer)
     GST_FIXME ("Need to implement header extension negotiation when "
         "reciving a remote offers");
   } else {
-    auto videopay = gst_bin_get_by_name (GST_BIN (pipe1), "videopay");
-    g_assert_nonnull (videopay);
-    auto video_twcc = gst_rtp_header_extension_create_from_uri (RTP_TWCC_URI);
-    g_assert_nonnull (video_twcc);
-    gst_rtp_header_extension_set_id (video_twcc, 1);
-    g_signal_emit_by_name (videopay, "add-extension", video_twcc);
-    g_clear_object (&video_twcc);
-    g_clear_object (&videopay);
 
-    auto audiopay = gst_bin_get_by_name (GST_BIN (pipe1), "audiopay");
-    g_assert_nonnull (audiopay);
-    auto audio_twcc = gst_rtp_header_extension_create_from_uri (RTP_TWCC_URI);
-    g_assert_nonnull (audio_twcc);
-    gst_rtp_header_extension_set_id (audio_twcc, 1);
-    g_signal_emit_by_name (audiopay, "add-extension", audio_twcc);
-    g_clear_object (&audio_twcc);
-    g_clear_object (&audiopay);
+    auto lam = [] (const gchar* name) {
+        auto videopay = gst_bin_get_by_name(GST_BIN(pipe1), name);
+        g_assert_nonnull(videopay);
+        auto video_twcc = gst_rtp_header_extension_create_from_uri(RTP_TWCC_URI);
+        g_assert_nonnull(video_twcc);
+        gst_rtp_header_extension_set_id(video_twcc, 1);
+        g_signal_emit_by_name(videopay, "add-extension", video_twcc);
+        g_clear_object(&video_twcc);
+        g_clear_object(&videopay);
+    };
+
+    lam("videopay");
+    lam("audiopay");
   }
 
   /* This is the gstwebrtc entry point where we create the offer and so on. It
@@ -820,7 +817,9 @@ static gpointer glibMainLoopThreadFunc(gpointer /*unused*/)
     signaling_connection->connect_to_server_async();
 
     g_main_loop_run(loop);
-    g_main_loop_unref(loop);
+    //g_main_loop_unref(loop);
+    if (loop)
+        g_clear_pointer(&loop, g_main_loop_unref);
     loop = nullptr;
 
     if (webrtcbin_get_stats_id)
@@ -836,6 +835,8 @@ static gpointer glibMainLoopThreadFunc(gpointer /*unused*/)
     webrtc1 = nullptr;
 
     signaling_connection.reset();
+
+    ice_candidates.clear();
 
     return nullptr;
 }
