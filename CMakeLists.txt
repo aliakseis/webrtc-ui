@@ -25,26 +25,35 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 #endif()
 
 
-
-find_package(PkgConfig)
-
-pkg_check_modules(GSTREAMER REQUIRED 
-  glib-2.0
-  json-glib-1.0
-  libsoup-2.4
-  gstreamer-1.0 
-  gstreamer-video-1.0
-  gstreamer-sdp-1.0
-  gstreamer-rtp-1.0
-  gstreamer-webrtc-1.0
-)
-
-message("GSTREAMER_INCLUDE_DIRS: ${GSTREAMER_INCLUDE_DIRS}")
-
-message("GSTREAMER_LIBRARY_DIRS: ${GSTREAMER_LIBRARY_DIRS}")
+include(cmake/detect_gstreamer.cmake)
 
 
-link_directories(${GSTREAMER_LIBRARY_DIRS})
+#find_package(PkgConfig)
+
+#pkg_check_modules(GSTREAMER REQUIRED 
+#  glib-2.0
+#  json-glib-1.0
+#  libsoup-2.4
+#  gstreamer-1.0 
+#  gstreamer-video-1.0
+#  gstreamer-sdp-1.0
+#  gstreamer-rtp-1.0
+#  gstreamer-webrtc-1.0
+#)
+
+#message("GSTREAMER_INCLUDE_DIRS: ${GSTREAMER_INCLUDE_DIRS}")
+
+#message("GSTREAMER_LIBRARY_DIRS: ${GSTREAMER_LIBRARY_DIRS}")
+
+
+#link_directories(${GSTREAMER_LIBRARY_DIRS})
+
+if (HAVE_GSTREAMER)
+	message ("    GStreamer: (${GSTREAMER_VERSION})")
+else()
+	message( FATAL_ERROR "GStreamer not found." )
+endif()
+
 
 find_package(crossguid CONFIG REQUIRED)
 
@@ -144,12 +153,21 @@ if(MSVC)
 	set(CMAKE_INSTALL_OPENMP_LIBRARIES TRUE)
 	include (InstallRequiredSystemLibraries)
 
-	if (QT_QMAKE_EXECUTABLE)
-		get_filename_component(QT_BIN_DIRECTORY ${QT_QMAKE_EXECUTABLE} DIRECTORY)
-		install(CODE "execute_process(COMMAND \"${QT_BIN_DIRECTORY}/windeployqt\"  \"${BINARY_FILE}\" WORKING_DIRECTORY \"${QT_BIN_DIRECTORY}\")")
-	else()
-		install(CODE "execute_process(COMMAND \"windeployqt\"  \"${BINARY_FILE}\" )")
-	endif()
+# Retrieve the absolute path to qmake and then use that path to find
+# the windeployqt binary
+	get_target_property(_qmake_executable Qt5::qmake IMPORTED_LOCATION)
+	get_filename_component(_qt_bin_dir "${_qmake_executable}" DIRECTORY)
+	find_program(WINDEPLOYQT_EXECUTABLE windeployqt HINTS "${_qt_bin_dir}")
+
+	install(CODE "execute_process(COMMAND \"${WINDEPLOYQT_EXECUTABLE}\"  \"${BINARY_FILE}\" WORKING_DIRECTORY \"${_qt_bin_dir}\")")
+
+
+	#if (QT_QMAKE_EXECUTABLE)
+	#	get_filename_component(QT_BIN_DIRECTORY ${QT_QMAKE_EXECUTABLE} DIRECTORY)
+	#	install(CODE "execute_process(COMMAND \"${QT_BIN_DIRECTORY}/windeployqt\"  \"${BINARY_FILE}\" WORKING_DIRECTORY \"${QT_BIN_DIRECTORY}\")")
+	#else()
+	#	install(CODE "execute_process(COMMAND \"windeployqt\"  \"${BINARY_FILE}\" )")
+	#endif()
 
 
 	#if (CMAKE_SIZEOF_VOID_P EQUAL 8)
@@ -159,9 +177,9 @@ if(MSVC)
 	#endif ()
 
 	if (CMAKE_SIZEOF_VOID_P EQUAL 8)
-	    install(DIRECTORY "$ENV{GSTREAMER_ROOT_X86_64}/" DESTINATION gst PATTERN "*.pdb" EXCLUDE)
+	    install(DIRECTORY "$ENV{GSTREAMER_1_0_ROOT_MSVC_X86_64}/" DESTINATION gst PATTERN "*.pdb" EXCLUDE)
 	else ()
-	    install(DIRECTORY "$ENV{GSTREAMER_ROOT_X86}/" DESTINATION gst PATTERN "*.pdb" EXCLUDE)
+	    install(DIRECTORY "$ENV{GSTREAMER_1_0_ROOT_MSVC_X86}/" DESTINATION gst PATTERN "*.pdb" EXCLUDE)
 	endif ()
 
 	install(FILES run.cmd DESTINATION .)
