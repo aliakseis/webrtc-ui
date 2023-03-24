@@ -505,9 +505,15 @@ start_pipeline (gboolean create_offer)
   GstStateChangeReturn ret;
   GError *error = nullptr;
 
+  auto turnServer = QSettings().value(SETTING_TURN).toString().trimmed().toStdString();
+  if (!turnServer.empty())
+  {
+      turnServer = " turn-server=turn://" + turnServer + ' ';
+  }
+
   pipe1 =
       gst_parse_launch (("webrtcbin bundle-policy=max-bundle name=sendrecv "
-      STUN_SERVER
+      STUN_SERVER + turnServer
       + QSettings().value(SETTING_VIDEO_LAUNCH_LINE, VIDEO_LAUNCH_LINE_DEFAULT).toString().toStdString() +
       " ! videoconvert ! queue ! "
       /* increase the default keyframe distance, browsers have really long

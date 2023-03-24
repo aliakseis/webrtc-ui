@@ -4,6 +4,8 @@
 
 inline const auto SETTING_SESSION_ID = QStringLiteral("sessionId");
 
+inline const auto SETTING_TURN = QStringLiteral("TURN");
+
 inline const auto SETTING_VIDEO_LAUNCH_LINE = QStringLiteral("videoLaunchLine");
 inline const auto SETTING_AUDIO_LAUNCH_LINE = QStringLiteral("audioLaunchLine");
 
