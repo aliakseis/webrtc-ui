@@ -3,8 +3,12 @@
 #include <QApplication>
 #include <QFile>
 #include <QStyleFactory>
+#include <QSettings>
 
 #include <gst/gst.h>
+
+#include "preferences.h"
+#include "globals.h"
 
 int main(int argc, char *argv[])
 {
@@ -24,6 +28,14 @@ int main(int argc, char *argv[])
         a.setStyleSheet(css_data.readAll());
         css_data.close();
     }
+
+    if (QSettings().value(SETTING_SESSION_ID).toString().trimmed().isEmpty())
+    {
+        Preferences prefDlg(nullptr);
+        if (prefDlg.exec() != QDialog::Accepted)
+            return 1;
+    }
+
     MainWindow w;
     w.show();
     return QApplication::exec();

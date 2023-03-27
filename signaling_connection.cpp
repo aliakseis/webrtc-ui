@@ -41,7 +41,7 @@ protected:
         const auto message = this_guid.str() + '\n' + text;
 
         char buffer[1024];
-        sprintf(buffer, send_message_url, QSettings().value(SETTING_SESSION_ID).toString().toStdString().c_str());
+        sprintf(buffer, send_message_url, QSettings().value(SETTING_SESSION_ID).toString().trimmed().toStdString().c_str());
         http(HTTP_POST, buffer, nullptr, message.c_str(), message.length());
     }
 
@@ -163,7 +163,7 @@ protected:
                 };
 
                 char buffer[1024];
-                sprintf(buffer, recv_message_url, QSettings().value(SETTING_SESSION_ID).toString().toStdString().c_str());
+                sprintf(buffer, recv_message_url, QSettings().value(SETTING_SESSION_ID).toString().trimmed().toStdString().c_str());
                 http(HTTP_GET, buffer, headers, nullptr, 0, on_data, verify_sse_response, progress_callback);
         };
 
