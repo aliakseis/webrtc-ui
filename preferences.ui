@@ -264,11 +264,23 @@
        <number>9</number>
       </property>
       <item>
-       <widget class="QLabel" name="label">
-        <property name="text">
-         <string>TURN:</string>
-        </property>
-       </widget>
+              <widget class="QCheckBox" name="checkBox_TURN">
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="focusPolicy">
+                <enum>Qt::StrongFocus</enum>
+               </property>
+               <property name="text">
+                <string>TURN</string>
+               </property>
+               <property name="checked">
+                <bool>false</bool>
+               </property>
+              </widget>
       </item>
       <item>
        <widget class="QLineEdit" name="lineEdit_TURN"/>

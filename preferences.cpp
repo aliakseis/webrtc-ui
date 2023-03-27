@@ -29,6 +29,7 @@ Preferences::Preferences(QWidget *parent) :
 
     ui->lineEdit_SessionID->setText(settings.value(SETTING_SESSION_ID).toString());
 
+    ui->checkBox_TURN->setChecked(settings.value(SETTING_USE_TURN).toBool());
     ui->lineEdit_TURN->setText(settings.value(SETTING_TURN).toString());
 
     (settings.value(SETTING_AUTOVIDEOSRC, true).toBool()
@@ -149,6 +150,7 @@ void Preferences::accept()
 
     settings.setValue(SETTING_SESSION_ID, ui->lineEdit_SessionID->text());
 
+    settings.setValue(SETTING_USE_TURN, ui->checkBox_TURN->isChecked());
     settings.setValue(SETTING_TURN, ui->lineEdit_TURN->text());
 
     settings.setValue(SETTING_AUTOVIDEOSRC, ui->autoVideoSrc->isChecked());

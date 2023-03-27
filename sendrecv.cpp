@@ -505,10 +505,14 @@ start_pipeline (gboolean create_offer)
   GstStateChangeReturn ret;
   GError *error = nullptr;
 
-  auto turnServer = QSettings().value(SETTING_TURN).toString().trimmed().toStdString();
-  if (!turnServer.empty())
+  std::string turnServer;
+  if (QSettings().value(SETTING_USE_TURN).toBool())
   {
-      turnServer = " turn-server=turn://" + turnServer + ' ';
+      turnServer = QSettings().value(SETTING_TURN).toString().trimmed().toStdString();
+      if (!turnServer.empty())
+      {
+          turnServer = " turn-server=turn://" + turnServer + ' ';
+      }
   }
 
   pipe1 =
