@@ -533,7 +533,7 @@ start_pipeline (gboolean create_offer)
        * periods between keyframes and rely on PLI events on packet loss to
        * fix corrupted video.
        */
-      "vp8enc deadline=1 keyframe-max-dist=2000 ! "
+      "vp8enc deadline=1 keyframe-max-dist=10 ! "
       /* picture-id-mode=15-bit seems to make TWCC stats behave better */
       "rtpvp8pay name=videopay picture-id-mode=15-bit ! "
       "queue ! " RTP_CAPS_VP8 "96 ! sendrecv. "
@@ -586,6 +586,12 @@ start_pipeline (gboolean create_offer)
       G_CALLBACK (on_ice_gathering_state_notify), NULL);
   g_signal_connect(webrtc1, "on-new-transceiver",
       G_CALLBACK(on_new_transceiver), NULL);
+
+  /*
+  auto rtpbin = gst_bin_get_by_name(GST_BIN(webrtc1), "rtpbin");
+  g_object_set(rtpbin, "latency", 1000, NULL);
+  g_object_unref(rtpbin);
+  */
 
   gst_element_set_state (pipe1, GST_STATE_READY);
 
