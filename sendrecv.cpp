@@ -497,6 +497,15 @@ webrtcbin_get_stats (GstElement * webrtcbin)
   return G_SOURCE_REMOVE;
 }
 
+
+static void
+on_new_transceiver(GstElement * webrtc, GstWebRTCRTPTransceiver * trans)
+{
+    /* If we expected more than one transceiver, we would take a look at
+     * trans->mline, and compare it with webrtcbin's local description */
+    g_object_set(trans, "fec-type", GST_WEBRTC_FEC_TYPE_ULP_RED, "do-nack", TRUE, NULL);
+}
+
 #define RTP_TWCC_URI "http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01"
 
 gboolean
@@ -575,6 +584,8 @@ start_pipeline (gboolean create_offer)
       G_CALLBACK (send_ice_candidate_message), NULL);
   g_signal_connect (webrtc1, "notify::ice-gathering-state",
       G_CALLBACK (on_ice_gathering_state_notify), NULL);
+  g_signal_connect(webrtc1, "on-new-transceiver",
+      G_CALLBACK(on_new_transceiver), NULL);
 
   gst_element_set_state (pipe1, GST_STATE_READY);
 
