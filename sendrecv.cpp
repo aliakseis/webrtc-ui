@@ -529,12 +529,9 @@ start_pipeline (gboolean create_offer)
       STUN_SERVER + turnServer
       + QSettings().value(SETTING_VIDEO_LAUNCH_LINE, VIDEO_LAUNCH_LINE_DEFAULT).toString().toStdString() +
       " ! videoconvert ! queue ! "
-      /* increase the default keyframe distance, browsers have really long
-       * periods between keyframes and rely on PLI events on packet loss to
-       * fix corrupted video.
-       */
-      "vp8enc deadline=1 keyframe-max-dist=10 ! "
-      /* picture-id-mode=15-bit seems to make TWCC stats behave better */
+      // https://developer.ridgerun.com/wiki/index.php/GstKinesisWebRTC/Getting_Started/C_Example_Application
+      "vp8enc error-resilient=partitions keyframe-max-dist=10 deadline=1 ! "
+      // picture-id-mode=15-bit seems to make TWCC stats behave better
       "rtpvp8pay name=videopay picture-id-mode=15-bit ! "
       "queue ! " RTP_CAPS_VP8 "96 ! sendrecv. "
       + QSettings().value(SETTING_AUDIO_LAUNCH_LINE, AUDIO_LAUNCH_LINE_DEFAULT).toString().toStdString() +
