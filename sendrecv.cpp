@@ -105,8 +105,11 @@ get_string_from_json_object (JsonObject * object)
 
 
 
-
+#ifdef _WIN64
+#define DEFAULT_VIDEOSINK "d3d11videosink"
+#else
 #define DEFAULT_VIDEOSINK "d3dvideosink"
+#endif
 
 /* slightly convoluted way to find a working video sink that's not a bin,
  * one could use autovideosink from gst-plugins-good instead
