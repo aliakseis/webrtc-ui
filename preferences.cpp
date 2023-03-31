@@ -21,8 +21,10 @@ Preferences::Preferences(QWidget *parent) :
     ui->setupUi(this);
 
     QApplication::setOverrideCursor(Qt::WaitCursor);
-    on_pushButton_update_camera_list_clicked();
-    on_pushButton_update_audio_list_clicked();
+
+    ui->comboBox_camera->addItems(updateCameraInfo());
+    ui->comboBox_audio->addItems(updateAudioInfo());
+
     QApplication::restoreOverrideCursor();
 
     QSettings settings;
@@ -87,8 +89,17 @@ QStringList Preferences::updateAudioInfo()
 
 void Preferences::on_pushButton_update_camera_list_clicked()
 {
+    auto cameraId = ui->comboBox_camera->currentText();
+    auto cameraRes = ui->comboBox_camera_res->currentIndex();
+
     ui->comboBox_camera->clear();
     ui->comboBox_camera->addItems( updateCameraInfo() );
+
+    ui->comboBox_camera->setCurrentText(cameraId);
+    if (cameraRes >= 0)
+    {
+        ui->comboBox_camera_res->setCurrentIndex(cameraRes);
+    }
 }
 
 void Preferences::on_comboBox_camera_currentIndexChanged(int index)
@@ -120,8 +131,12 @@ void Preferences::on_comboBox_camera_currentIndexChanged(int index)
 
 void Preferences::on_pushButton_update_audio_list_clicked()
 {
+    auto audioId = ui->comboBox_audio->currentText();
+
     ui->comboBox_audio->clear();
     ui->comboBox_audio->addItems( updateAudioInfo() );
+
+    ui->comboBox_audio->setCurrentText(audioId);
 }
 
 void Preferences::on_comboBox_audio_currentIndexChanged(int index)
