@@ -455,6 +455,40 @@ on_ice_gathering_state_notify (GstElement * webrtcbin, GParamSpec * pspec,
   gst_print ("ICE gathering state changed to %s\n", new_state);
 }
 
+static void
+on_ice_connection_state_notify(GstElement * webrtcbin, GParamSpec * pspec,
+    gpointer user_data)
+{
+    GstWebRTCICEConnectionState ice_connection_state;
+    const gchar *new_state = "unknown";
+
+    g_object_get(webrtcbin, "ice-connection-state", &ice_connection_state, NULL);
+    switch (ice_connection_state) {
+    case GST_WEBRTC_ICE_CONNECTION_STATE_NEW:
+        new_state = "new";
+        break;
+    case GST_WEBRTC_ICE_CONNECTION_STATE_CHECKING:
+        new_state = "checking";
+        break;
+    case GST_WEBRTC_ICE_CONNECTION_STATE_CONNECTED:
+        new_state = "connected";
+        break;
+    case GST_WEBRTC_ICE_CONNECTION_STATE_COMPLETED:
+        new_state = "completed";
+        break;
+    case GST_WEBRTC_ICE_CONNECTION_STATE_FAILED:
+        new_state = "failed";
+        break;
+    case GST_WEBRTC_ICE_CONNECTION_STATE_DISCONNECTED:
+        new_state = "disconnected";
+        break;
+    case GST_WEBRTC_ICE_CONNECTION_STATE_CLOSED:
+        new_state = "closed";
+        break;
+    }
+    gst_print("ICE connection state changed to %s\n", new_state);
+}
+
 static gboolean webrtcbin_get_stats (GstElement * webrtcbin);
 
 static gboolean
@@ -586,6 +620,8 @@ start_pipeline (gboolean create_offer)
       G_CALLBACK (on_ice_gathering_state_notify), NULL);
   g_signal_connect(webrtc1, "on-new-transceiver",
       G_CALLBACK(on_new_transceiver), NULL);
+  g_signal_connect(webrtc1, "notify::ice-connection-state",
+      G_CALLBACK(on_ice_connection_state_notify), NULL);
 
   /*
   auto rtpbin = gst_bin_get_by_name(GST_BIN(webrtc1), "rtpbin");
