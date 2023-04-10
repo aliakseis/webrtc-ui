@@ -160,6 +160,59 @@ find_video_sink ()
 }
 
 
+static GstPadProbeReturn
+static_rtp_packet_loss_probe(GstPad *opad, GstPadProbeInfo *p_info, gpointer /*p_data*/)
+{
+    if (G_UNLIKELY((p_info->type & GST_PAD_PROBE_TYPE_EVENT_DOWNSTREAM) == 0))
+        return GST_PAD_PROBE_OK;
+
+    GstEvent *event = gst_pad_probe_info_get_event(p_info);
+    switch (GST_EVENT_TYPE(event))
+    {
+    //case GST_EVENT_CUSTOM_DOWNSTREAM:
+    //{
+    //    // rtpjitterbuffer (which is inside the rtpbin
+    //    // that is inside rtspsrc) generates this event.
+    //    // So far, there is no dedicated packet loss event
+    //    // type, and custom downstream events are used instead.
+    //    if (gst_event_has_name(event, "GstRTPPacketLost"))
+    //    {
+    //        GstStructure const *s = gst_event_get_structure(event);
+    //        guint num_packets = 1;
+
+    //        if (gst_structure_has_field(s, "num-packets"))
+    //            gst_structure_get_uint(s, "num-packets", &num_packets);
+
+    //        gst_print("detected %d lost or too-late packet(s)", num_packets);
+    //    }
+
+    //    break;
+    //}
+
+    case GST_EVENT_GAP:
+    {
+        static GstClockTime prev_ts{};
+        GstClockTime ts, dur;
+        gst_event_parse_gap(event, &ts, &dur);
+        if (prev_ts != ts)
+        {
+            prev_ts = ts;
+            GstClockTime end = ts;
+            if (ts != GST_CLOCK_TIME_NONE && dur != GST_CLOCK_TIME_NONE)
+                end += dur;
+            g_print("%s:%s Gap TS: %" GST_TIME_FORMAT " dur %" GST_TIME_FORMAT
+                " (to %" GST_TIME_FORMAT ")\n", GST_DEBUG_PAD_NAME(opad),
+                GST_TIME_ARGS(ts), GST_TIME_ARGS(dur), GST_TIME_ARGS(end));
+        }
+        break;
+    }
+
+    default:
+        break;
+    }
+
+    return GST_PAD_PROBE_OK;
+}
 
 
 
@@ -189,6 +242,13 @@ handle_media_stream (GstPad * pad, GstElement * pipe, const char *convert_name,
     gst_element_sync_state_with_parent (sink);
     gst_element_link_many (q, conv, resample, sink, NULL);
   } else {
+      // adding a probe for handling loss messages from rtpbin
+      gst_pad_add_probe(pad,
+          GST_PAD_PROBE_TYPE_EVENT_DOWNSTREAM,
+          static_rtp_packet_loss_probe,
+          nullptr,
+          nullptr);
+
     gst_bin_add_many (GST_BIN (pipe), q, conv, sink, NULL);
     gst_element_sync_state_with_parent (q);
     gst_element_sync_state_with_parent (conv);
