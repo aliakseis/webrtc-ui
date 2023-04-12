@@ -5,6 +5,8 @@
 
 #include <QSettings>
 #include <QDebug>
+#include <QMessageBox>
+#include <QFileDialog>
 
 
 namespace {
@@ -191,6 +193,42 @@ void Preferences::on_comboBox_audio_currentIndexChanged(int index)
     else
     {
         ui->label_audio->setText(mAudios.at(index).description);
+    }
+}
+
+void Preferences::on_checkBox_save_clicked(bool checked)
+{
+    if (checked)
+    {
+        QString folderPath = ui->lineEdit_SavePath->text().trimmed();
+        if (!folderPath.isEmpty())
+        {
+            QDir dir(folderPath);
+            if (dir.mkpath(".")) // https://stackoverflow.com/a/11517874/10472202
+            {
+                ui->lineEdit_SavePath->setEnabled(false);
+                ui->pushButton_chooseSavePath->setEnabled(false);
+                return;
+            }
+        }
+        ui->checkBox_save->setChecked(false);
+        QMessageBox::warning(this, tr("Wrong Directory path"),
+            tr("Cannot use directory path: \"%1\"").arg(folderPath));
+    }
+    else
+    {
+        ui->lineEdit_SavePath->setEnabled(true);
+        ui->pushButton_chooseSavePath->setEnabled(true);
+        //m_videoSaver->onVideoStopped();
+    }
+}
+
+void Preferences::on_pushButton_chooseSavePath_clicked()
+{
+    QString dir = QFileDialog::getExistingDirectory(this, tr("Choose a Save Videos Directory"));
+    if (!dir.isEmpty())
+    {
+        ui->lineEdit_SavePath->setText(dir);
     }
 }
 
