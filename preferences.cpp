@@ -6,6 +6,39 @@
 #include <QSettings>
 #include <QDebug>
 
+
+namespace {
+
+const int sliceIntervalValues[] = { 1, 2, 5, 10, 30 };
+
+void InitSliceDurationsCombo(QComboBox* combo)
+{
+    combo->addItem(QObject::tr("No slice"));
+    for (int minutes = 0; minutes <= 1; ++minutes)
+    { 
+        auto templ = QObject::tr(minutes ? "%1 min" : "%1 sec");
+        for (auto v : sliceIntervalValues)
+        {
+            combo->addItem(templ.arg(v));
+        }
+    }
+}
+
+int getSliceDurationSecs(QComboBox* combo) // zero if no slices
+{
+    const int index = combo->currentIndex() - 1;
+    if (index < 0)
+        return 0;
+
+    const int minutes = index / std::size(sliceIntervalValues);
+    const int valueIdx = index % std::size(sliceIntervalValues);
+
+    return (minutes ? 60 : 1) * sliceIntervalValues[valueIdx];
+}
+
+}
+
+
 const auto SETTING_AUTOVIDEOSRC = QStringLiteral("autovideosrc");
 const auto SETTING_AUTOAUDIOSRC = QStringLiteral("autoaudiosrc");
 
@@ -19,6 +52,8 @@ Preferences::Preferences(QWidget *parent) :
     ui(new Ui::Preferences)
 {
     ui->setupUi(this);
+
+    InitSliceDurationsCombo(ui->comboBox_SliceDuration);
 
     QApplication::setOverrideCursor(Qt::WaitCursor);
 
