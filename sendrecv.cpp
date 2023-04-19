@@ -278,6 +278,10 @@ on_incoming_decodebin_stream (GstElement * decodebin, GstPad * pad,
   caps = gst_pad_get_current_caps (pad);
   name = gst_structure_get_name (gst_caps_get_structure (caps, 0));
 
+  auto str = gst_caps_to_string(caps);
+  g_print("on_incoming_decodebin_stream pad caps: %s\n", str);
+  g_free(str);
+
   if (g_str_has_prefix (name, "video")) {
     auto sink = find_video_sink();
     handle_media_stream (pad, pipe, "videoconvert", sink);//"autovideosink");
@@ -292,21 +296,95 @@ on_incoming_decodebin_stream (GstElement * decodebin, GstPad * pad,
 static void
 on_incoming_stream (GstElement * webrtc, GstPad * pad, GstElement * pipe)
 {
-  GstElement *decodebin;
-  GstPad *sinkpad;
+  //GstElement *decodebin;
+  //GstPad *sinkpad;
 
   if (GST_PAD_DIRECTION (pad) != GST_PAD_SRC)
     return;
 
-  decodebin = gst_element_factory_make ("decodebin", nullptr);
+  auto decodebin = gst_element_factory_make ("decodebin", nullptr);
   g_signal_connect (decodebin, "pad-added",
       G_CALLBACK (on_incoming_decodebin_stream), pipe);
   gst_bin_add (GST_BIN (pipe), decodebin);
   gst_element_sync_state_with_parent (decodebin);
 
-  sinkpad = gst_element_get_static_pad (decodebin, "sink");
-  gst_pad_link (pad, sinkpad);
-  gst_object_unref (sinkpad);
+  auto caps = gst_pad_get_current_caps(pad);
+  //auto name = gst_structure_get_name(gst_caps_get_structure(caps, 0));
+  //g_print("on_incoming_stream pad name: %s\n", name);
+  auto str = gst_caps_to_string(caps);
+  g_print("on_incoming_stream pad caps: %s\n", str);
+  g_free(str);
+
+  int payload = 0;
+  GstStructure *s = gst_caps_get_structure(caps, 0);
+  auto ok = gst_structure_get_int(s, "payload", &payload);
+  g_assert_true(ok);
+
+  if (payload == 96)
+  {
+      auto tee = gst_element_factory_make("tee", NULL);// "tee");
+      gst_bin_add(GST_BIN(pipe), tee);
+      gst_element_sync_state_with_parent(tee);
+
+      {
+          auto sinkpad = gst_element_get_static_pad(tee, "sink");
+          auto ret = gst_pad_link(pad, sinkpad);
+          g_assert_cmphex(ret, == , GST_PAD_LINK_OK);
+          gst_object_unref(sinkpad);
+      }
+      //*
+      {
+          auto srcpad = gst_element_get_request_pad(tee, "src_%u");
+          auto sinkpad = gst_element_get_static_pad(decodebin, "sink");
+          auto ret = gst_pad_link(srcpad, sinkpad);
+          g_assert_cmphex(ret, == , GST_PAD_LINK_OK);
+          gst_object_unref(srcpad);
+          gst_object_unref(sinkpad);
+      }
+      //*/
+
+      auto rtpvp8depay = gst_element_factory_make("rtpvp8depay", nullptr);// "rtpvp8depay");
+      //g_object_set(G_OBJECT(rtpvp8depay),
+      //    "wait-for-keyframe", TRUE,
+      //    NULL);
+      ok = gst_bin_add(GST_BIN(pipe1), rtpvp8depay);
+      g_assert_true(ok);
+
+      //auto splitmuxsink = gst_element_factory_make("fakesink", nullptr);
+      //g_object_set(G_OBJECT(splitmuxsink),
+      //    "sync", FALSE,
+      //    NULL);
+      auto splitmuxsink = gst_element_factory_make("splitmuxsink", nullptr);
+      auto s = gst_structure_new("properties",
+          "streamable", G_TYPE_BOOLEAN, TRUE,
+          nullptr);
+      g_object_set(G_OBJECT(splitmuxsink),
+          "location", "d:/videos/video%05d.webm",
+          "max-size-time", (guint64)10000000000,
+          "muxer-factory", "webmmux",
+          "muxer-properties", s,
+          NULL);
+
+      ok = gst_bin_add(GST_BIN(pipe1), splitmuxsink);
+      g_assert_true(ok);
+
+      ok = gst_element_sync_state_with_parent(rtpvp8depay);
+      g_assert_true(ok);
+      ok = gst_element_sync_state_with_parent(splitmuxsink);
+      g_assert_true(ok);
+
+      ok = gst_element_link_many(tee,
+          rtpvp8depay, //conv, 
+          splitmuxsink,
+          NULL);
+      g_assert_true(ok);
+  }
+  else
+  {
+      auto sinkpad = gst_element_get_static_pad(decodebin, "sink");
+      gst_pad_link(pad, sinkpad);
+      gst_object_unref(sinkpad);
+  }
 }
 
 #if 0
