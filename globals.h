@@ -12,3 +12,8 @@ inline const auto SETTING_AUDIO_LAUNCH_LINE = QStringLiteral("audioLaunchLine");
 
 inline const auto VIDEO_LAUNCH_LINE_DEFAULT = QStringLiteral("autovideosrc");
 inline const auto AUDIO_LAUNCH_LINE_DEFAULT = QStringLiteral("autoaudiosrc");
+
+inline const auto SETTING_DO_SAVE = QStringLiteral("doSave");
+inline const auto SETTING_SAVE_PATH = QStringLiteral("savePath");
+
+int getSliceDurationSecs(); // zero if no slices

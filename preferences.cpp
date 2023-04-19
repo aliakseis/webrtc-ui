@@ -26,18 +26,6 @@ void InitSliceDurationsCombo(QComboBox* combo)
     }
 }
 
-int getSliceDurationSecs(QComboBox* combo) // zero if no slices
-{
-    const int index = combo->currentIndex() - 1;
-    if (index < 0)
-        return 0;
-
-    const int minutes = index / std::size(sliceIntervalValues);
-    const int valueIdx = index % std::size(sliceIntervalValues);
-
-    return (minutes ? 60 : 1) * sliceIntervalValues[valueIdx];
-}
-
 }
 
 
@@ -48,6 +36,21 @@ const auto SETTING_CAMERA_ID = QStringLiteral("cameraId");
 const auto SETTING_CAMERA_RESOLUTION = QStringLiteral("cameraResolution");
 
 const auto SETTING_AUDIO_ID = QStringLiteral("audioId");
+
+inline const auto SETTING_SAVE_SLICE_DURATION = QStringLiteral("saveSliceDuration");
+
+int getSliceDurationSecs() // zero if no slices
+{
+    const int index = QSettings().value(SETTING_SAVE_SLICE_DURATION, 0).toInt() - 1;
+    if (index < 0)
+        return 0;
+
+    const int minutes = index / std::size(sliceIntervalValues);
+    const int valueIdx = index % std::size(sliceIntervalValues);
+
+    return (minutes ? 60 : 1) * sliceIntervalValues[valueIdx];
+}
+
 
 Preferences::Preferences(QWidget *parent) :
     QDialog(parent),
@@ -89,6 +92,10 @@ Preferences::Preferences(QWidget *parent) :
     {
         ui->comboBox_audio->setCurrentText(audioId.toString());
     }
+
+    ui->checkBox_save->setChecked(settings.value(SETTING_DO_SAVE).toBool());
+    ui->lineEdit_SavePath->setText(settings.value(SETTING_SAVE_PATH).toString());
+    ui->comboBox_SliceDuration->setCurrentIndex(settings.value(SETTING_SAVE_SLICE_DURATION, 0).toInt());
 }
 
 Preferences::~Preferences()
@@ -278,6 +285,10 @@ void Preferences::accept()
     }
     settings.setValue(SETTING_AUDIO_LAUNCH_LINE, audioLaunchLine);
     qDebug() << SETTING_AUDIO_LAUNCH_LINE << audioLaunchLine;
+
+    settings.setValue(SETTING_DO_SAVE, ui->checkBox_save->isChecked());
+    settings.setValue(SETTING_SAVE_PATH, ui->lineEdit_SavePath->text());
+    settings.setValue(SETTING_SAVE_SLICE_DURATION, ui->comboBox_SliceDuration->currentIndex());
 
     QDialog::accept();
 }
