@@ -25,6 +25,8 @@
 #include "globals.h"
 
 #include <QSettings>
+#include <QDateTime>
+#include <QFile>
 
 #include <cstring>
 
@@ -293,12 +295,27 @@ on_incoming_decodebin_stream (GstElement * decodebin, GstPad * pad,
   }
 }
 
+
+static auto prepare_next_file_name() {
+    QDateTime now = QDateTime::currentDateTime();
+    const auto name = now.toString("yyMMddhhmmss");
+    const auto path = QSettings().value(SETTING_SAVE_PATH).toString() + '/' + name + ".webm";
+    return QFile::encodeName(path);// .constData();
+}
+
+gchar *splitmuxsink_on_format_location_full(GstElement *splitmux,
+    guint fragment_id,
+    GstSample *first_sample,
+    gpointer user_data) {
+    //g_print("Requesting new file path for device recording \n");
+    auto nextfilename = prepare_next_file_name();
+    g_print("New file name generated for recording as %s \n", nextfilename.constData());
+    return g_strdup_printf("%s", nextfilename.constData());
+}
+
 static void
 on_incoming_stream (GstElement * webrtc, GstPad * pad, GstElement * pipe)
 {
-  //GstElement *decodebin;
-  //GstPad *sinkpad;
-
   if (GST_PAD_DIRECTION (pad) != GST_PAD_SRC)
     return;
 
@@ -309,17 +326,17 @@ on_incoming_stream (GstElement * webrtc, GstPad * pad, GstElement * pipe)
   gst_element_sync_state_with_parent (decodebin);
 
   auto caps = gst_pad_get_current_caps(pad);
-  //auto name = gst_structure_get_name(gst_caps_get_structure(caps, 0));
-  //g_print("on_incoming_stream pad name: %s\n", name);
   auto str = gst_caps_to_string(caps);
   g_print("on_incoming_stream pad caps: %s\n", str);
   g_free(str);
 
   int payload = 0;
-  GstStructure *s = gst_caps_get_structure(caps, 0);
-  auto ok = gst_structure_get_int(s, "payload", &payload);
-  g_assert_true(ok);
-
+  if (QSettings().value(SETTING_DO_SAVE).toBool())
+  {
+      GstStructure *s = gst_caps_get_structure(caps, 0);
+      auto ok = gst_structure_get_int(s, "payload", &payload);
+      g_assert_true(ok);
+  }
   if (payload == 96)
   {
       auto tee = gst_element_factory_make("tee", NULL);// "tee");
@@ -332,7 +349,6 @@ on_incoming_stream (GstElement * webrtc, GstPad * pad, GstElement * pipe)
           g_assert_cmphex(ret, == , GST_PAD_LINK_OK);
           gst_object_unref(sinkpad);
       }
-      //*
       {
           auto srcpad = gst_element_get_request_pad(tee, "src_%u");
           auto sinkpad = gst_element_get_static_pad(decodebin, "sink");
@@ -341,43 +357,70 @@ on_incoming_stream (GstElement * webrtc, GstPad * pad, GstElement * pipe)
           gst_object_unref(srcpad);
           gst_object_unref(sinkpad);
       }
-      //*/
 
       auto rtpvp8depay = gst_element_factory_make("rtpvp8depay", nullptr);// "rtpvp8depay");
-      //g_object_set(G_OBJECT(rtpvp8depay),
-      //    "wait-for-keyframe", TRUE,
-      //    NULL);
-      ok = gst_bin_add(GST_BIN(pipe1), rtpvp8depay);
-      g_assert_true(ok);
-
-      //auto splitmuxsink = gst_element_factory_make("fakesink", nullptr);
-      //g_object_set(G_OBJECT(splitmuxsink),
-      //    "sync", FALSE,
-      //    NULL);
-      auto splitmuxsink = gst_element_factory_make("splitmuxsink", nullptr);
-      auto s = gst_structure_new("properties",
-          "streamable", G_TYPE_BOOLEAN, TRUE,
-          nullptr);
-      g_object_set(G_OBJECT(splitmuxsink),
-          "location", "d:/videos/video%05d.webm",
-          "max-size-time", (guint64)10000000000,
-          "muxer-factory", "webmmux",
-          "muxer-properties", s,
-          NULL);
-
-      ok = gst_bin_add(GST_BIN(pipe1), splitmuxsink);
+      auto ok = gst_bin_add(GST_BIN(pipe1), rtpvp8depay);
       g_assert_true(ok);
 
       ok = gst_element_sync_state_with_parent(rtpvp8depay);
       g_assert_true(ok);
-      ok = gst_element_sync_state_with_parent(splitmuxsink);
-      g_assert_true(ok);
 
-      ok = gst_element_link_many(tee,
-          rtpvp8depay, //conv, 
-          splitmuxsink,
-          NULL);
-      g_assert_true(ok);
+      const int sliceDurationSecs = getSliceDurationSecs();
+      if (sliceDurationSecs > 0)
+      {
+          auto splitmuxsink = gst_element_factory_make("splitmuxsink", nullptr);
+          auto s = gst_structure_new("properties",
+              "streamable", G_TYPE_BOOLEAN, TRUE,
+              nullptr);
+          g_object_set(G_OBJECT(splitmuxsink),
+              //"location", "d:/videos/video%05d.webm",
+              "max-size-time", GST_SECOND * sliceDurationSecs,  //(guint64)10000000000,
+              "muxer-factory", "webmmux",
+              "muxer-properties", s,
+              NULL);
+          g_signal_connect(splitmuxsink, "format-location-full",
+              G_CALLBACK(splitmuxsink_on_format_location_full), NULL);
+
+          ok = gst_bin_add(GST_BIN(pipe1), splitmuxsink);
+          g_assert_true(ok);
+
+          ok = gst_element_sync_state_with_parent(splitmuxsink);
+          g_assert_true(ok);
+
+          ok = gst_element_link_many(tee,
+              rtpvp8depay,
+              splitmuxsink,
+              NULL);
+          g_assert_true(ok);
+      }
+      else
+      {
+          auto webmmux = gst_element_factory_make("webmmux", nullptr);
+          ok = gst_bin_add(GST_BIN(pipe1), webmmux);
+          g_assert_true(ok);
+
+          ok = gst_element_sync_state_with_parent(webmmux);
+          g_assert_true(ok);
+
+          auto filesink = gst_element_factory_make("filesink", nullptr);
+          ok = gst_bin_add(GST_BIN(pipe1), filesink);
+          g_assert_true(ok);
+
+          auto nextfilename = prepare_next_file_name();
+          g_object_set(G_OBJECT(filesink),
+              "location", nextfilename.constData(),
+              NULL);
+
+          ok = gst_element_sync_state_with_parent(filesink);
+          g_assert_true(ok);
+
+          ok = gst_element_link_many(tee,
+              rtpvp8depay,
+              webmmux,
+              filesink,
+              NULL);
+          g_assert_true(ok);
+      }
   }
   else
   {
