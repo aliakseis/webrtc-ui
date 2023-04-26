@@ -350,37 +350,35 @@ static GstElement* get_file_sink(GstBin* pipe)
 
         return splitmuxsink;
     }
-    else
-    {
-        auto webmmux = gst_element_factory_make("webmmux", file_sink_name);
-        auto ok = gst_bin_add(GST_BIN(pipe1), webmmux);
-        g_assert_true(ok);
+    
+    auto webmmux = gst_element_factory_make("webmmux", file_sink_name);
+    auto ok = gst_bin_add(GST_BIN(pipe1), webmmux);
+    g_assert_true(ok);
 
-        ok = gst_element_sync_state_with_parent(webmmux);
-        g_assert_true(ok);
+    ok = gst_element_sync_state_with_parent(webmmux);
+    g_assert_true(ok);
 
-        auto filesink = gst_element_factory_make("filesink", nullptr);
-        ok = gst_bin_add(GST_BIN(pipe1), filesink);
-        g_assert_true(ok);
+    auto filesink = gst_element_factory_make("filesink", nullptr);
+    ok = gst_bin_add(GST_BIN(pipe1), filesink);
+    g_assert_true(ok);
 
-        auto nextfilename = prepare_next_file_name();
-        g_object_set(G_OBJECT(filesink),
-            "location", nextfilename.constData(),
-            NULL);
+    auto nextfilename = prepare_next_file_name();
+    g_object_set(G_OBJECT(filesink),
+        "location", nextfilename.constData(),
+        NULL);
 
-        ok = gst_element_sync_state_with_parent(filesink);
-        g_assert_true(ok);
+    ok = gst_element_sync_state_with_parent(filesink);
+    g_assert_true(ok);
 
-        ok = gst_element_link_many(
-            //tee,
-            //rtpvp8depay,
-            webmmux,
-            filesink,
-            NULL);
-        g_assert_true(ok);
+    ok = gst_element_link_many(
+        //tee,
+        //rtpvp8depay,
+        webmmux,
+        filesink,
+        NULL);
+    g_assert_true(ok);
 
-        return webmmux;
-    }
+    return webmmux;
 }
 
 static void
@@ -448,33 +446,20 @@ on_incoming_stream (GstElement * webrtc, GstPad * pad, GstElement * pipe)
 
       auto sink = get_file_sink(GST_BIN(pipe1));
 
-      //if (payload == 96)
-      //{
-      //    ok = gst_element_link_many(tee,
-      //        rtpvp8depay,
-      //        queue,
-      //        sink,
-      //        NULL);
-      //    g_assert_true(ok);
-      //}
+        ok = gst_element_link_many(tee,
+            rtpvp8depay,
+            queue,
+            //sink,
+            NULL);
+        g_assert_true(ok);
 
-      //else
-      {
-          ok = gst_element_link_many(tee,
-              rtpvp8depay,
-              queue,
-              //sink,
-              NULL);
-          g_assert_true(ok);
-
-          auto srcpad = gst_element_get_static_pad(queue, "src");
-          auto sinkpad = gst_element_get_request_pad(sink, 
-              (payload == 97) ? "audio_%u" : ((getSliceDurationSecs() > 0) ? "video" : "video_%u"));
-          auto ret = gst_pad_link(srcpad, sinkpad);
-          g_assert_cmphex(ret, == , GST_PAD_LINK_OK);
-          gst_object_unref(srcpad);
-          gst_object_unref(sinkpad);
-      }
+        auto srcpad = gst_element_get_static_pad(queue, "src");
+        auto sinkpad = gst_element_get_request_pad(sink, 
+            (payload == 97) ? "audio_%u" : ((getSliceDurationSecs() > 0) ? "video" : "video_%u"));
+        auto ret = gst_pad_link(srcpad, sinkpad);
+        g_assert_cmphex(ret, == , GST_PAD_LINK_OK);
+        gst_object_unref(srcpad);
+        gst_object_unref(sinkpad);
   }
   else
   {
