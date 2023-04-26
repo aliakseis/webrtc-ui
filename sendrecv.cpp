@@ -35,6 +35,7 @@
 
 #include <atomic>
 #include <memory>
+#include <mutex>
 
 #define GST_CAT_DEFAULT webrtc_sendrecv_debug
 GST_DEBUG_CATEGORY_STATIC (GST_CAT_DEFAULT);
@@ -313,6 +314,75 @@ gchar *splitmuxsink_on_format_location_full(GstElement *splitmux,
     return g_strdup_printf("%s", nextfilename.constData());
 }
 
+static GstElement* get_file_sink(GstBin* pipe)
+{
+    static std::mutex mtx;
+    std::unique_lock<std::mutex> lock(mtx);
+
+    const char file_sink_name[] = "file_sink";
+    if (auto result = gst_bin_get_by_name(pipe, file_sink_name))
+        return result;
+
+    const int sliceDurationSecs = getSliceDurationSecs();
+    if (sliceDurationSecs > 0)
+    {
+        auto splitmuxsink = gst_element_factory_make("splitmuxsink", file_sink_name);
+        //auto s = gst_structure_new("properties",
+        //    "streamable", G_TYPE_BOOLEAN, TRUE,
+        //    nullptr);
+        auto muxer = gst_element_factory_make("webmmux", nullptr);
+        g_object_set(G_OBJECT(splitmuxsink),
+            //"location", "d:/videos/video%05d.webm",
+            //"async-finalize", TRUE,
+            "max-size-time", GST_SECOND * sliceDurationSecs,  //(guint64)10000000000,
+            //"muxer-factory", "webmmux",
+            //"muxer-properties", s,
+            "muxer", muxer,
+            NULL);
+        g_signal_connect(splitmuxsink, "format-location-full",
+            G_CALLBACK(splitmuxsink_on_format_location_full), NULL);
+
+        auto ok = gst_bin_add(GST_BIN(pipe1), splitmuxsink);
+        g_assert_true(ok);
+
+        ok = gst_element_sync_state_with_parent(splitmuxsink);
+        g_assert_true(ok);
+
+        return splitmuxsink;
+    }
+    else
+    {
+        auto webmmux = gst_element_factory_make("webmmux", file_sink_name);
+        auto ok = gst_bin_add(GST_BIN(pipe1), webmmux);
+        g_assert_true(ok);
+
+        ok = gst_element_sync_state_with_parent(webmmux);
+        g_assert_true(ok);
+
+        auto filesink = gst_element_factory_make("filesink", nullptr);
+        ok = gst_bin_add(GST_BIN(pipe1), filesink);
+        g_assert_true(ok);
+
+        auto nextfilename = prepare_next_file_name();
+        g_object_set(G_OBJECT(filesink),
+            "location", nextfilename.constData(),
+            NULL);
+
+        ok = gst_element_sync_state_with_parent(filesink);
+        g_assert_true(ok);
+
+        ok = gst_element_link_many(
+            //tee,
+            //rtpvp8depay,
+            webmmux,
+            filesink,
+            NULL);
+        g_assert_true(ok);
+
+        return webmmux;
+    }
+}
+
 static void
 on_incoming_stream (GstElement * webrtc, GstPad * pad, GstElement * pipe)
 {
@@ -337,9 +407,9 @@ on_incoming_stream (GstElement * webrtc, GstPad * pad, GstElement * pipe)
       auto ok = gst_structure_get_int(s, "payload", &payload);
       g_assert_true(ok);
   }
-  if (payload == 96)
+  if (payload == 96 || payload == 97)
   {
-      auto tee = gst_element_factory_make("tee", NULL);// "tee");
+      auto tee = gst_element_factory_make("tee", nullptr);// "tee");
       gst_bin_add(GST_BIN(pipe), tee);
       gst_element_sync_state_with_parent(tee);
 
@@ -358,68 +428,52 @@ on_incoming_stream (GstElement * webrtc, GstPad * pad, GstElement * pipe)
           gst_object_unref(sinkpad);
       }
 
-      auto rtpvp8depay = gst_element_factory_make("rtpvp8depay", nullptr);// "rtpvp8depay");
+      auto rtpvp8depay = gst_element_factory_make(
+          (payload == 96) ? "rtpvp8depay" : "rtpopusdepay",
+          nullptr);// "rtpvp8depay");
+
       auto ok = gst_bin_add(GST_BIN(pipe1), rtpvp8depay);
       g_assert_true(ok);
 
       ok = gst_element_sync_state_with_parent(rtpvp8depay);
       g_assert_true(ok);
 
-      const int sliceDurationSecs = getSliceDurationSecs();
-      if (sliceDurationSecs > 0)
+      auto queue = gst_element_factory_make("queue", nullptr);
+
+      ok = gst_bin_add(GST_BIN(pipe1), queue);
+      g_assert_true(ok);
+
+      ok = gst_element_sync_state_with_parent(queue);
+      g_assert_true(ok);
+
+      auto sink = get_file_sink(GST_BIN(pipe1));
+
+      //if (payload == 96)
+      //{
+      //    ok = gst_element_link_many(tee,
+      //        rtpvp8depay,
+      //        queue,
+      //        sink,
+      //        NULL);
+      //    g_assert_true(ok);
+      //}
+
+      //else
       {
-          auto splitmuxsink = gst_element_factory_make("splitmuxsink", nullptr);
-          auto s = gst_structure_new("properties",
-              "streamable", G_TYPE_BOOLEAN, TRUE,
-              nullptr);
-          g_object_set(G_OBJECT(splitmuxsink),
-              //"location", "d:/videos/video%05d.webm",
-              "max-size-time", GST_SECOND * sliceDurationSecs,  //(guint64)10000000000,
-              "muxer-factory", "webmmux",
-              "muxer-properties", s,
-              NULL);
-          g_signal_connect(splitmuxsink, "format-location-full",
-              G_CALLBACK(splitmuxsink_on_format_location_full), NULL);
-
-          ok = gst_bin_add(GST_BIN(pipe1), splitmuxsink);
-          g_assert_true(ok);
-
-          ok = gst_element_sync_state_with_parent(splitmuxsink);
-          g_assert_true(ok);
-
           ok = gst_element_link_many(tee,
               rtpvp8depay,
-              splitmuxsink,
+              queue,
+              //sink,
               NULL);
           g_assert_true(ok);
-      }
-      else
-      {
-          auto webmmux = gst_element_factory_make("webmmux", nullptr);
-          ok = gst_bin_add(GST_BIN(pipe1), webmmux);
-          g_assert_true(ok);
 
-          ok = gst_element_sync_state_with_parent(webmmux);
-          g_assert_true(ok);
-
-          auto filesink = gst_element_factory_make("filesink", nullptr);
-          ok = gst_bin_add(GST_BIN(pipe1), filesink);
-          g_assert_true(ok);
-
-          auto nextfilename = prepare_next_file_name();
-          g_object_set(G_OBJECT(filesink),
-              "location", nextfilename.constData(),
-              NULL);
-
-          ok = gst_element_sync_state_with_parent(filesink);
-          g_assert_true(ok);
-
-          ok = gst_element_link_many(tee,
-              rtpvp8depay,
-              webmmux,
-              filesink,
-              NULL);
-          g_assert_true(ok);
+          auto srcpad = gst_element_get_static_pad(queue, "src");
+          auto sinkpad = gst_element_get_request_pad(sink, 
+              (payload == 97) ? "audio_%u" : ((getSliceDurationSecs() > 0) ? "video" : "video_%u"));
+          auto ret = gst_pad_link(srcpad, sinkpad);
+          g_assert_cmphex(ret, == , GST_PAD_LINK_OK);
+          gst_object_unref(srcpad);
+          gst_object_unref(sinkpad);
       }
   }
   else
