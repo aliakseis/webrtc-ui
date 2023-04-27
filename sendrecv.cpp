@@ -327,17 +327,17 @@ static GstElement* get_file_sink(GstBin* pipe)
     if (sliceDurationSecs > 0)
     {
         auto splitmuxsink = gst_element_factory_make("splitmuxsink", file_sink_name);
-        //auto s = gst_structure_new("properties",
-        //    "streamable", G_TYPE_BOOLEAN, TRUE,
-        //    nullptr);
-        auto muxer = gst_element_factory_make("webmmux", nullptr);
+        auto s = gst_structure_new("properties",
+            "streamable", G_TYPE_BOOLEAN, TRUE,
+            nullptr);
+        //auto muxer = gst_element_factory_make("webmmux", nullptr);
         g_object_set(G_OBJECT(splitmuxsink),
             //"location", "d:/videos/video%05d.webm",
             //"async-finalize", TRUE,
             "max-size-time", GST_SECOND * sliceDurationSecs,  //(guint64)10000000000,
-            //"muxer-factory", "webmmux",
-            //"muxer-properties", s,
-            "muxer", muxer,
+            "muxer-factory", "webmmux",
+            "muxer-properties", s,
+            //"muxer", muxer,
             NULL);
         g_signal_connect(splitmuxsink, "format-location-full",
             G_CALLBACK(splitmuxsink_on_format_location_full), NULL);
