@@ -323,6 +323,8 @@ static GstElement* get_file_sink(GstBin* pipe)
     if (auto result = gst_bin_get_by_name(pipe, file_sink_name))
         return result;
 
+    const char muxerName[] = "webmmux";
+
     const int sliceDurationSecs = getSliceDurationSecs();
     if (sliceDurationSecs > 0)
     {
@@ -333,9 +335,9 @@ static GstElement* get_file_sink(GstBin* pipe)
         //auto muxer = gst_element_factory_make("webmmux", nullptr);
         g_object_set(G_OBJECT(splitmuxsink),
             //"location", "d:/videos/video%05d.webm",
-            //"async-finalize", TRUE,
+            "async-finalize", TRUE,
             "max-size-time", GST_SECOND * sliceDurationSecs,  //(guint64)10000000000,
-            "muxer-factory", "webmmux",
+            "muxer-factory", muxerName,
             "muxer-properties", s,
             //"muxer", muxer,
             NULL);
@@ -351,11 +353,11 @@ static GstElement* get_file_sink(GstBin* pipe)
         return splitmuxsink;
     }
     
-    auto webmmux = gst_element_factory_make("webmmux", file_sink_name);
-    auto ok = gst_bin_add(GST_BIN(pipe1), webmmux);
+    auto muxer = gst_element_factory_make(muxerName, file_sink_name);
+    auto ok = gst_bin_add(GST_BIN(pipe1), muxer);
     g_assert_true(ok);
 
-    ok = gst_element_sync_state_with_parent(webmmux);
+    ok = gst_element_sync_state_with_parent(muxer);
     g_assert_true(ok);
 
     auto filesink = gst_element_factory_make("filesink", nullptr);
@@ -373,12 +375,12 @@ static GstElement* get_file_sink(GstBin* pipe)
     ok = gst_element_link_many(
         //tee,
         //rtpvp8depay,
-        webmmux,
+        muxer,
         filesink,
         NULL);
     g_assert_true(ok);
 
-    return webmmux;
+    return muxer;
 }
 
 static void
@@ -426,6 +428,11 @@ on_incoming_stream (GstElement * webrtc, GstPad * pad, GstElement * pipe)
           gst_object_unref(sinkpad);
       }
 
+      //auto rtpjitterbuffer = gst_element_factory_make("rtpjitterbuffer", nullptr);
+
+      //auto ok = gst_bin_add(GST_BIN(pipe1), rtpjitterbuffer);
+      //g_assert_true(ok);
+
       auto rtpvp8depay = gst_element_factory_make(
           (payload == 96) ? "rtpvp8depay" : "rtpopusdepay",
           nullptr);// "rtpvp8depay");
@@ -447,6 +454,7 @@ on_incoming_stream (GstElement * webrtc, GstPad * pad, GstElement * pipe)
       auto sink = get_file_sink(GST_BIN(pipe1));
 
         ok = gst_element_link_many(tee,
+            //rtpjitterbuffer,
             rtpvp8depay,
             queue,
             //sink,
@@ -763,6 +771,56 @@ on_new_transceiver(GstElement * webrtc, GstWebRTCRTPTransceiver * trans)
     g_object_set(trans, "fec-type", GST_WEBRTC_FEC_TYPE_ULP_RED, "do-nack", TRUE, NULL);
 }
 
+static gboolean bus_call(GstBus * /*bus*/, GstMessage *msg, void *user_data)
+{
+    switch (GST_MESSAGE_TYPE(msg))
+    {
+    case GST_MESSAGE_ERROR:
+    {
+        GError *err;
+        gchar *debug;
+        gst_message_parse_error(msg, &err, &debug);
+        g_print("GOT ERROR %s\n", err->message);
+        g_error_free(err);
+        g_free(debug);
+
+        if (auto srcName = GST_MESSAGE_SRC_NAME(msg))
+        {
+            g_print("ERROR SOURCE %s\n", srcName);
+            // could get and handle source: GST_MESSAGE_SRC(msg);
+        }
+
+    //    if (context->loop)
+    //        g_main_loop_quit(context->loop);
+
+    //    return FALSE;
+    }
+
+    //case GST_MESSAGE_EOS:
+    //{
+    //    g_message("End-of-stream");
+    //    if (context->loop)
+    //        g_main_loop_quit(context->loop);
+    //    break;
+    //}
+
+    case GST_MESSAGE_LATENCY:
+    {
+        // when pipeline latency is changed, this msg is posted on the bus. we then have
+        // to explicitly tell the pipeline to recalculate its latency
+        if (pipe1 && !gst_bin_recalculate_latency(GST_BIN(pipe1)))
+            g_print("Could not reconfigure latency.\n");
+        else
+            g_print("Reconfigured latency.\n");
+        break;
+    }
+    default:
+        break;
+    }
+
+    return TRUE;
+}
+
 #define RTP_TWCC_URI "http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01"
 
 gboolean
@@ -800,6 +858,11 @@ start_pipeline (gboolean create_offer)
     g_error_free (error);
     goto err;
   }
+
+  // add bus call
+  GstBus *bus = gst_pipeline_get_bus(GST_PIPELINE(pipe1));
+  gst_bus_add_watch(bus, bus_call, nullptr);
+  gst_object_unref(bus);
 
   webrtc1 = gst_bin_get_by_name (GST_BIN (pipe1), "sendrecv");
   g_assert_nonnull (webrtc1);
