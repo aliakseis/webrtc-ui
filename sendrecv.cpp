@@ -27,6 +27,7 @@
 #include <QSettings>
 #include <QDateTime>
 #include <QFile>
+#include <QSlider>
 
 #include <cstring>
 
@@ -50,14 +51,16 @@ static guint webrtcbin_get_stats_id = 0;
 
 const static gboolean remote_is_offerer = FALSE;
 
-std::vector<std::pair<int, std::string>> ice_candidates;
+static std::vector<std::pair<int, std::string>> ice_candidates;
 
 static guintptr xwinid;
+
+static QSlider* g_volume_notifier;
 
 ////////////////////////////////////////////////////////////////////
 
 
-std::unique_ptr<ISignalingConnection> signaling_connection;
+static std::unique_ptr<ISignalingConnection> signaling_connection;
 
 
 ////////////////////////////////////////////////////////////////////
@@ -218,6 +221,15 @@ static_rtp_packet_loss_probe(GstPad *opad, GstPadProbeInfo *p_info, gpointer /*p
 }
 
 
+static void
+disconnect(gpointer data,
+    GObject *where_the_object_was)
+{
+    auto c = static_cast<QMetaObject::Connection*>(data);
+    auto ok = QObject::disconnect(*c);
+    g_assert_true(ok);
+    delete c;
+}
 
 static void
 handle_media_stream (GstPad * pad, GstElement * pipe, const char *convert_name,
@@ -238,12 +250,23 @@ handle_media_stream (GstPad * pad, GstElement * pipe, const char *convert_name,
      * Will be a no-op if it's not required. */
     auto resample = gst_element_factory_make ("audioresample", nullptr);
     g_assert_nonnull (resample);
-    gst_bin_add_many (GST_BIN (pipe), q, conv, resample, sink, NULL);
+
+
+    auto volume = gst_element_factory_make("volume", nullptr);
+    auto c = new QMetaObject::Connection(
+        QObject::connect(g_volume_notifier, &QSlider::valueChanged, [volume](int v) {
+                g_object_set(volume, "volume", v / 100., NULL);
+            })
+    );
+    g_object_weak_ref(G_OBJECT(volume), disconnect, c);
+
+    gst_bin_add_many (GST_BIN (pipe), q, conv, resample, volume, sink, NULL);
     gst_element_sync_state_with_parent (q);
     gst_element_sync_state_with_parent (conv);
     gst_element_sync_state_with_parent (resample);
+    gst_element_sync_state_with_parent(volume);
     gst_element_sync_state_with_parent (sink);
-    gst_element_link_many (q, conv, resample, sink, NULL);
+    gst_element_link_many (q, conv, resample, volume, sink, NULL);
   } else {
       // adding a probe for handling loss messages from rtpbin
       gst_pad_add_probe(pad,
@@ -1221,13 +1244,15 @@ static gpointer glibMainLoopThreadFunc(gpointer /*unused*/)
 }
 
 
-bool start_sendrecv(unsigned long long winid)
+bool start_sendrecv(unsigned long long winid, QSlider* volume_notifier)
 {
     if (loop == nullptr) {
         if (!check_plugins ())
             return false;
 
         xwinid = winid;
+
+        g_volume_notifier = volume_notifier;
 
         app_state = APP_STATE_UNKNOWN;
 

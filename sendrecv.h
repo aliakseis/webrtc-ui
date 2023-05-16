@@ -26,6 +26,8 @@ enum AppState
 
 extern AppState app_state;
 
+class QSlider;
+
 gboolean
 cleanup_and_quit_loop(const gchar * msg, enum AppState state);
 
@@ -34,5 +36,5 @@ void on_server_message(const gchar *text);
 gboolean
 start_pipeline(gboolean create_offer);
 
-bool start_sendrecv(unsigned long long winid);
+bool start_sendrecv(unsigned long long winid, QSlider* volume_notifier);
 

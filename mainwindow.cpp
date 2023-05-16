@@ -7,6 +7,7 @@
 #include "sendrecv.h"
 
 #include <QMessageBox>
+#include <QSlider>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -17,6 +18,12 @@ MainWindow::MainWindow(QWidget *parent)
 
     ui->setupUi(this);
     ui->toolBar->addWidget(m_mainToolbar);
+
+    m_volume = new QSlider(Qt::Horizontal, this);
+    m_volume->setMaximumWidth(100);
+    m_volume->setRange(0, 100);
+    m_volume->setValue(100);
+    statusBar()->addPermanentWidget(m_volume);
 
     connect(m_mainToolbar, &MainToolBar::ringingCall, this, &MainWindow::onRingingCall);
     connect(m_mainToolbar, &MainToolBar::hangUp, this, &MainWindow::onHangUp);
@@ -32,7 +39,7 @@ MainWindow::~MainWindow()
 
 void MainWindow::onRingingCall()
 {
-    start_sendrecv(ui->centralwidget->winId());
+    start_sendrecv(ui->centralwidget->winId(), m_volume);
 }
 
 void MainWindow::onHangUp()

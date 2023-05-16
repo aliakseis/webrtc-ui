@@ -7,6 +7,8 @@ QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
 QT_END_NAMESPACE
 
+class QSlider;
+
 class MainToolBar;
 
 class MainWindow : public QMainWindow
@@ -27,5 +29,6 @@ private:
     Ui::MainWindow *ui;
 
     MainToolBar* m_mainToolbar;
+    QSlider* m_volume;
 };
 #endif // MAINWINDOW_H
