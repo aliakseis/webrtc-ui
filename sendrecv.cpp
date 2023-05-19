@@ -231,6 +231,36 @@ disconnect(gpointer data,
     delete c;
 }
 
+class GObjHandle
+{
+public:
+    GObjHandle(gpointer p)
+    {
+        g_weak_ref_init(&m_ref, p);
+    }
+    ~GObjHandle()
+    {
+        if (m_valid)
+            g_weak_ref_clear(&m_ref);
+    }
+    GObjHandle(GObjHandle&& other) : m_ref(other.m_ref)
+    {
+        other.m_valid = false;
+    }
+    GObjHandle(const GObjHandle&) = delete;
+    GObjHandle operator =(const GObjHandle&) = delete;
+
+    auto get() const
+    {
+        auto ptr = g_weak_ref_get(&m_ref);
+        return std::unique_ptr<void, decltype(&g_object_unref)>(ptr, &g_object_unref);
+    }
+
+private:
+    mutable GWeakRef m_ref;
+    bool m_valid = true;
+};
+
 static void
 handle_media_stream (GstPad * pad, GstElement * pipe, const char *convert_name,
     //const char *sink_name)
@@ -251,11 +281,11 @@ handle_media_stream (GstPad * pad, GstElement * pipe, const char *convert_name,
     auto resample = gst_element_factory_make ("audioresample", nullptr);
     g_assert_nonnull (resample);
 
-    // TODO use GWeakRef
     auto volume = gst_element_factory_make("volume", nullptr);
     auto c = new QMetaObject::Connection(
-        QObject::connect(g_volume_notifier, &QSlider::valueChanged, [volume](int v) {
-                g_object_set(volume, "volume", v / 100., NULL);
+        QObject::connect(g_volume_notifier, &QSlider::valueChanged, [ptr = GObjHandle(volume)](int v) {
+                if (auto obj = ptr.get())
+                    g_object_set(obj.get(), "volume", v / 100., NULL);
             })
     );
     g_object_weak_ref(G_OBJECT(volume), disconnect, c);
