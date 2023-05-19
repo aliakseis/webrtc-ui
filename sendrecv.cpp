@@ -323,7 +323,13 @@ on_incoming_decodebin_stream (GstElement * decodebin, GstPad * pad,
 static auto prepare_next_file_name() {
     QDateTime now = QDateTime::currentDateTime();
     const auto name = now.toString("yyMMddhhmmss");
-    const auto path = QSettings().value(SETTING_SAVE_PATH).toString() + '/' + name + ".webm";
+    auto path = QSettings().value(SETTING_SAVE_PATH).toString() + '/' + name + ".webm";
+    int i = 0;
+    while (QFile::exists(path))
+    {
+        ++i;
+        path = QSettings().value(SETTING_SAVE_PATH).toString() + '/' + name + '(' + QString::number(i) + ").webm";
+    }
     return QFile::encodeName(path);// .constData();
 }
 
