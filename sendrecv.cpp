@@ -251,7 +251,7 @@ handle_media_stream (GstPad * pad, GstElement * pipe, const char *convert_name,
     auto resample = gst_element_factory_make ("audioresample", nullptr);
     g_assert_nonnull (resample);
 
-
+    // TODO use GWeakRef
     auto volume = gst_element_factory_make("volume", nullptr);
     auto c = new QMetaObject::Connection(
         QObject::connect(g_volume_notifier, &QSlider::valueChanged, [volume](int v) {
