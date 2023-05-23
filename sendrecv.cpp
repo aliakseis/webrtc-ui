@@ -243,7 +243,7 @@ public:
         if (m_valid)
             g_weak_ref_clear(&m_ref);
     }
-    GObjHandle(GObjHandle&& other) : m_ref(other.m_ref)
+    GObjHandle(GObjHandle&& other)  noexcept : m_ref(other.m_ref)
     {
         other.m_valid = false;
     }
