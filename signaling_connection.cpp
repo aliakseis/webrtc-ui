@@ -80,28 +80,29 @@ protected:
 
                         const char watch[] = "data:";
 
+                        JsonParser *parser = nullptr;
                         auto pData = std::search(ptr, ptrEnd, std::begin(watch), std::prev(std::end(watch)));
                         if (pData != ptrEnd) do {
                             pData += sizeof(watch) / sizeof(watch[0]) - 1;
 
-                            JsonParser *parser = json_parser_new();
+                            parser = json_parser_new();
                             if (!json_parser_load_from_data(parser, pData, ptrEnd - pData, nullptr)) {
                                 //gst_printerr("Unknown message '%s', ignoring\n", text);
-                                g_object_unref(parser);
+                                //g_object_unref(parser);
                                 break; //goto out;
                             }
 
                             auto root = json_parser_get_root(parser);
                             if (!JSON_NODE_HOLDS_OBJECT(root)) {
                                 //gst_printerr("Unknown json message '%s', ignoring\n", text);
-                                g_object_unref(parser);
+                                //g_object_unref(parser);
                                 break; //goto out;
                             }
 
                             auto child = json_node_get_object(root);
 
                             if (!json_object_has_member(child, "event")) {
-                                g_object_unref(parser);
+                                //g_object_unref(parser);
                                 break; //goto out;
                             }
 
@@ -119,6 +120,8 @@ protected:
                                     {
                                         if (!their_giud.isValid())
                                             their_giud = std::string(sender_guid);
+                                        else if (their_giud.str() != sender_guid)
+                                            break; //goto out;
 
                                         const auto message = pos + 1;
                                         const bool is_syn = g_strcmp0(message, "SYN") == 0;
@@ -140,9 +143,11 @@ protected:
                                 }
                             }
 
-                            g_object_unref(parser);
 
                         } while (false);
+
+                        if (parser)
+                            g_object_unref(parser);
                     }
                     catch (const std::exception& ex) {
                         qCritical() << "Exception " << typeid(ex).name() << ": " << ex.what();
