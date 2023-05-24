@@ -6,6 +6,8 @@
 
 #include "globals.h"
 
+#include "makeguard.h"
+
 #include <json-glib/json-glib.h>
 
 #include <crossguid/guid.hpp>
@@ -80,19 +82,18 @@ protected:
 
                         const char watch[] = "data:";
 
-                        JsonParser *parser = nullptr;
                         auto pData = std::search(ptr, ptrEnd, std::begin(watch), std::prev(std::end(watch)));
                         if (pData != ptrEnd) do {
                             pData += sizeof(watch) / sizeof(watch[0]) - 1;
 
-                            parser = json_parser_new();
-                            if (!json_parser_load_from_data(parser, pData, ptrEnd - pData, nullptr)) {
+                            auto parser = MakeGuard(json_parser_new(), g_object_unref);
+                            if (!json_parser_load_from_data(parser.get(), pData, ptrEnd - pData, nullptr)) {
                                 //gst_printerr("Unknown message '%s', ignoring\n", text);
                                 //g_object_unref(parser);
                                 break; //goto out;
                             }
 
-                            auto root = json_parser_get_root(parser);
+                            auto root = json_parser_get_root(parser.get());
                             if (!JSON_NODE_HOLDS_OBJECT(root)) {
                                 //gst_printerr("Unknown json message '%s', ignoring\n", text);
                                 //g_object_unref(parser);
@@ -142,12 +143,7 @@ protected:
                                     }
                                 }
                             }
-
-
                         } while (false);
-
-                        if (parser)
-                            g_object_unref(parser);
                     }
                     catch (const std::exception& ex) {
                         qCritical() << "Exception " << typeid(ex).name() << ": " << ex.what();

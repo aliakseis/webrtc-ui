@@ -24,6 +24,8 @@
 
 #include "globals.h"
 
+#include "makeguard.h"
+
 #include <QSettings>
 #include <QDateTime>
 #include <QFile>
@@ -253,7 +255,7 @@ public:
     auto get() const
     {
         auto ptr = g_weak_ref_get(&m_ref);
-        return std::unique_ptr<void, decltype(&g_object_unref)>(ptr, &g_object_unref);
+        return MakeGuard(ptr, g_object_unref);
     }
 
 private:
