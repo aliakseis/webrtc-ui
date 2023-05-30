@@ -459,7 +459,9 @@ gst_pad_probe_callback(GstPad * pad,
     if (pts <= last_video_pts)
     {
         g_print("Out-of-order pts: %lld; the last pts: %lld.\n", pts, last_video_pts);
-        return GST_PAD_PROBE_DROP;
+        //return GST_PAD_PROBE_DROP;
+        buffer->pts = last_video_pts;
+        return GST_PAD_PROBE_OK;
     }
     last_video_pts = pts;
 
@@ -483,7 +485,9 @@ gst_pad_audio_probe_callback(GstPad * pad,
     if (pts <= last_audio_pts)
     {
         g_print("Out-of-order AUDIO pts: %lld; the last pts: %lld.\n", pts, last_audio_pts);
-        return GST_PAD_PROBE_DROP;
+        //return GST_PAD_PROBE_DROP;
+        buffer->pts = last_audio_pts;
+        return GST_PAD_PROBE_OK;
     }
     last_audio_pts = pts;
 
