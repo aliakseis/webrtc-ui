@@ -466,6 +466,31 @@ gst_pad_probe_callback(GstPad * pad,
     return GST_PAD_PROBE_OK;
 }
 
+
+
+static GstClockTime last_audio_pts{};
+
+// https://stackoverflow.com/questions/29107370/gstreamer-timestamps-pts-are-not-monotonically-increasing-for-captured-frames
+static GstPadProbeReturn
+gst_pad_audio_probe_callback(GstPad * pad,
+    GstPadProbeInfo * info,
+    gpointer user_data)
+{
+
+    auto buffer = gst_pad_probe_info_get_buffer(info);
+
+    auto pts = buffer->pts;
+    if (pts <= last_audio_pts)
+    {
+        g_print("Out-of-order AUDIO pts: %lld; the last pts: %lld.\n", pts, last_audio_pts);
+        return GST_PAD_PROBE_DROP;
+    }
+    last_audio_pts = pts;
+
+    return GST_PAD_PROBE_OK;
+}
+
+
 static void
 on_incoming_stream (GstElement * webrtc, GstPad * pad, GstElement * pipe)
 {
@@ -545,6 +570,12 @@ on_incoming_stream (GstElement * webrtc, GstPad * pad, GstElement * pipe)
 
         auto srcpad = gst_element_get_static_pad(rtpvp8depay, "src");
         gst_pad_add_probe(srcpad, GST_PAD_PROBE_TYPE_BUFFER, gst_pad_probe_callback, nullptr, nullptr);
+      }
+      else
+      {
+          last_audio_pts = {};
+          auto srcpad = gst_element_get_static_pad(rtpvp8depay, "src");
+          gst_pad_add_probe(srcpad, GST_PAD_PROBE_TYPE_BUFFER, gst_pad_audio_probe_callback, nullptr, nullptr);
       }
 
       ok = gst_element_link_many(tee,
