@@ -469,7 +469,7 @@ gst_pad_probe_callback(GstPad * pad,
 }
 
 
-
+/*
 static GstClockTime last_audio_pts{};
 
 // https://stackoverflow.com/questions/29107370/gstreamer-timestamps-pts-are-not-monotonically-increasing-for-captured-frames
@@ -493,7 +493,7 @@ gst_pad_audio_probe_callback(GstPad * pad,
 
     return GST_PAD_PROBE_OK;
 }
-
+*/
 
 static void
 on_incoming_stream (GstElement * webrtc, GstPad * pad, GstElement * pipe)
@@ -532,7 +532,7 @@ on_incoming_stream (GstElement * webrtc, GstPad * pad, GstElement * pipe)
           gst_object_unref(sinkpad);
       }
       {
-          auto srcpad = gst_element_get_request_pad(tee, "src_%u");
+          auto srcpad = gst_element_request_pad_simple(tee, "src_%u");
           auto sinkpad = gst_element_get_static_pad(decodebin, "sink");
           auto ret = gst_pad_link(srcpad, sinkpad);
           g_assert_cmphex(ret, == , GST_PAD_LINK_OK);
@@ -574,24 +574,58 @@ on_incoming_stream (GstElement * webrtc, GstPad * pad, GstElement * pipe)
 
         auto srcpad = gst_element_get_static_pad(rtpvp8depay, "src");
         gst_pad_add_probe(srcpad, GST_PAD_PROBE_TYPE_BUFFER, gst_pad_probe_callback, nullptr, nullptr);
+
+        ok = gst_element_link_many(tee,
+            //rtpjitterbuffer,
+            rtpvp8depay,
+            queue,
+            //sink,
+            NULL);
+        g_assert_true(ok);
       }
       else
       {
-          last_audio_pts = {};
-          auto srcpad = gst_element_get_static_pad(rtpvp8depay, "src");
-          gst_pad_add_probe(srcpad, GST_PAD_PROBE_TYPE_BUFFER, gst_pad_audio_probe_callback, nullptr, nullptr);
-      }
+          //last_audio_pts = {};
+          //auto srcpad = gst_element_get_static_pad(rtpvp8depay, "src");
+          //gst_pad_add_probe(srcpad, GST_PAD_PROBE_TYPE_BUFFER, gst_pad_audio_probe_callback, nullptr, nullptr);
 
-      ok = gst_element_link_many(tee,
+          //*
+          auto opusdec = gst_element_factory_make("opusdec", nullptr);
+          ok = gst_bin_add(GST_BIN(pipe1), opusdec);
+          g_assert_true(ok);
+          ok = gst_element_sync_state_with_parent(opusdec);
+          g_assert_true(ok);
+
+          //audiorate
+          auto audiorate = gst_element_factory_make("audiorate", nullptr);
+          ok = gst_bin_add(GST_BIN(pipe1), audiorate);
+          g_assert_true(ok);
+          ok = gst_element_sync_state_with_parent(audiorate);
+          g_assert_true(ok);
+
+          //opusenc
+          auto opusenc = gst_element_factory_make("opusenc", nullptr);
+          ok = gst_bin_add(GST_BIN(pipe1), opusenc);
+          g_assert_true(ok);
+          ok = gst_element_sync_state_with_parent(opusenc);
+          g_assert_true(ok);
+          //*/
+
+          ok = gst_element_link_many(tee,
               //rtpjitterbuffer,
               rtpvp8depay,
+              opusdec,
+              audiorate,
+              opusenc,
               queue,
               //sink,
               NULL);
-      g_assert_true(ok);
+          g_assert_true(ok);
+      }
+
 
       auto srcpad = gst_element_get_static_pad(queue, "src");
-      auto sinkpad = gst_element_get_request_pad(sink, 
+      auto sinkpad = gst_element_request_pad_simple(sink,
             (payload == 97) ? "audio_%u" : ((getSliceDurationSecs() > 0) ? "video" : "video_%u"));
       auto ret = gst_pad_link(srcpad, sinkpad);
       g_assert_cmphex(ret, == , GST_PAD_LINK_OK);
