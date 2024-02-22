@@ -55,3 +55,8 @@ compile_commands.json
 
 build/
 build64/
+
+.vs/
+
+CMakePresets.json
+CMakeUserPresets.json

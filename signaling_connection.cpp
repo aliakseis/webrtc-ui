@@ -120,7 +120,7 @@ protected:
                                     if (this_guid.str() != sender_guid)
                                     {
                                         if (!their_giud.isValid())
-                                            their_giud = std::string(sender_guid);
+                                            their_giud = xg::Guid{ sender_guid };
                                         else if (their_giud.str() != sender_guid)
                                             break; //goto out;
 
