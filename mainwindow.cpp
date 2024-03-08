@@ -25,10 +25,30 @@ MainWindow::MainWindow(QWidget *parent)
     m_volume->setValue(100);
     statusBar()->addPermanentWidget(m_volume);
 
+
+    // Set the text edit widget to read-only mode
+    ui->chatDisplay->setReadOnly(true);
+    // Set the text edit widget to word wrap mode
+    ui->chatDisplay->setWordWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
+
+    // Set the line edit widget to clear its text when return is pressed
+    ui->chatInput->setClearButtonEnabled(true);
+
+    // Set the push button widget to be enabled only when the line edit widget has some text
+    ui->sendButton->setEnabled(false);
+
+
     connect(m_mainToolbar, &MainToolBar::ringingCall, this, &MainWindow::onRingingCall);
     connect(m_mainToolbar, &MainToolBar::hangUp, this, &MainWindow::onHangUp);
     connect(m_mainToolbar, &MainToolBar::help, this, &MainWindow::onHelp);
     connect(m_mainToolbar, &MainToolBar::settings, this, &MainWindow::onSettings);
+
+
+    connect(ui->chatInput, &QLineEdit::textChanged, this, &MainWindow::onChatInputTextChanged);
+    connect(ui->chatInput, &QLineEdit::returnPressed, this, &MainWindow::onChatInputReturnPressed);
+    connect(ui->sendButton, &QPushButton::clicked, this, &MainWindow::onSendButtonClicked);
+
+    connect(this, &MainWindow::messageSent, this, &MainWindow::onMessageReceived, Qt::QueuedConnection);
 }
 
 MainWindow::~MainWindow()
@@ -39,7 +59,7 @@ MainWindow::~MainWindow()
 
 void MainWindow::onRingingCall()
 {
-    start_sendrecv(ui->centralwidget->winId(), m_volume);
+    start_sendrecv(ui->videoArea->winId(), m_volume);
 }
 
 void MainWindow::onHangUp()
@@ -65,4 +85,45 @@ void MainWindow::onSettings()
 
     Preferences prefDlg(this);
     prefDlg.exec();
+}
+
+// A slot that is called when the text of the chat input changes
+void MainWindow::onChatInputTextChanged(const QString& text)
+{
+    // Enable or disable the send button depending on whether the text is empty or not
+    ui->sendButton->setEnabled(!text.isEmpty());
+}
+
+// A slot that is called when the return key is pressed on the chat input
+void MainWindow::onChatInputReturnPressed()
+{
+    // Send the text of the chat input as a message
+    sendMessage(ui->chatInput->text());
+}
+
+// A slot that is called when the send button is clicked
+void MainWindow::onSendButtonClicked()
+{
+    // Send the text of the chat input as a message
+    sendMessage(ui->chatInput->text());
+}
+
+// A slot that is called when a message is received from another user
+void MainWindow::onMessageReceived(const QString& message)
+{
+    // Display the message on the chat display with the sender's name and a different text color
+    ui->chatDisplay->append(QStringLiteral("<font color=blue>%1</font>").arg(message));// , Qt::blue);
+}
+
+// A helper function that sends a message to another user
+void MainWindow::sendMessage(const QString& message)
+{
+    // Display the message on the chat display with the sender's name and a different text color
+    ui->chatDisplay->append(QStringLiteral("<font color=red>%1</font>").arg(message));// , Qt::red);
+
+    // Emit a signal that the message has been sent
+    emit messageSent(message);
+
+    // Clear the chat input
+    ui->chatInput->clear();
 }

@@ -19,11 +19,32 @@ public:
     MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
 
+signals:
+    // A signal that is emitted when a message is sent to another user
+    void messageSent(const QString& message);
+
+
 private slots:
     void onRingingCall();
     void onHangUp();
     void onHelp();
     void onSettings();
+
+    // A slot that is called when the text of the chat input changes
+    void onChatInputTextChanged(const QString& text);
+
+    // A slot that is called when the return key is pressed on the chat input
+    void onChatInputReturnPressed();
+
+    // A slot that is called when the send button is clicked
+    void onSendButtonClicked();
+
+    // A slot that is called when a message is received from another user
+    void onMessageReceived(const QString& message);
+ 
+private:
+    // A helper function that sends a message to another user
+    void sendMessage(const QString& message);
 
 private:
     Ui::MainWindow *ui;
