@@ -25,9 +25,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 #endif()
 
 
-include(cmake/detect_gstreamer.cmake)
-
-
 #find_package(PkgConfig)
 
 #pkg_check_modules(GSTREAMER REQUIRED 
@@ -47,6 +44,9 @@ include(cmake/detect_gstreamer.cmake)
 
 
 #link_directories(${GSTREAMER_LIBRARY_DIRS})
+
+
+include(cmake/detect_gstreamer.cmake)
 
 if (HAVE_GSTREAMER)
 	message ("    GStreamer: (${GSTREAMER_VERSION})")
