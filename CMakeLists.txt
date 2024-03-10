@@ -84,6 +84,7 @@ if(ANDROID)
     cameraman.h
     http.cpp
     http.h
+    isendrecv.h
     sendrecv.cpp
     sendrecv.h
     signaling_connection.cpp

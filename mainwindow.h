@@ -1,6 +1,8 @@
 #ifndef MAINWINDOW_H
 #define MAINWINDOW_H
 
+#include "isendrecv.h"
+
 #include <QMainWindow>
 
 QT_BEGIN_NAMESPACE
@@ -11,7 +13,7 @@ class QSlider;
 
 class MainToolBar;
 
-class MainWindow : public QMainWindow
+class MainWindow : public QMainWindow, public ISendRecv
 {
     Q_OBJECT
 
@@ -22,7 +24,7 @@ public:
 signals:
     // A signal that is emitted when a message is sent to another user
     void messageSent(const QString& message);
-
+    void messageReceived(const QString& message);
 
 private slots:
     void onRingingCall();
@@ -51,5 +53,9 @@ private:
 
     MainToolBar* m_mainToolbar;
     QSlider* m_volume;
+
+    // Inherited via ISendRecv
+    void handleRecv(const char* data) override;
+    void setSendLambda(std::function<void(const QString&)> lambda) override;
 };
 #endif // MAINWINDOW_H

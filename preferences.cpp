@@ -45,8 +45,8 @@ int getSliceDurationSecs() // zero if no slices
     if (index < 0)
         return 0;
 
-    const int minutes = index / std::size(sliceIntervalValues);
-    const int valueIdx = index % std::size(sliceIntervalValues);
+    const auto minutes = index / std::size(sliceIntervalValues);
+    const auto valueIdx = index % std::size(sliceIntervalValues);
 
     return (minutes ? 60 : 1) * sliceIntervalValues[valueIdx];
 }

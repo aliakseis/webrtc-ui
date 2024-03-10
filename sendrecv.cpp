@@ -1,4 +1,7 @@
 #include "sendrecv.h"
+
+#include "isendrecv.h"
+
 /*
  * Demo gstreamer app for negotiating and streaming a sendrecv webrtc stream
  * with a browser JS app.
@@ -58,6 +61,8 @@ static std::vector<std::pair<int, std::string>> ice_candidates;
 static guintptr xwinid;
 
 static QSlider* g_volume_notifier;
+
+static ISendRecv* p_sendrecv = nullptr;
 
 ////////////////////////////////////////////////////////////////////
 
@@ -780,6 +785,7 @@ data_channel_on_error (GObject * dc, gpointer user_data)
   cleanup_and_quit_loop ("Data channel error", APP_STATE_UNKNOWN);
 }
 
+/*
 static void
 data_channel_on_open (GObject * dc, gpointer user_data)
 {
@@ -789,6 +795,7 @@ data_channel_on_open (GObject * dc, gpointer user_data)
   g_signal_emit_by_name (dc, "send-data", bytes);
   g_bytes_unref (bytes);
 }
+*/
 
 static void
 data_channel_on_close (GObject * dc, gpointer user_data)
@@ -799,7 +806,9 @@ data_channel_on_close (GObject * dc, gpointer user_data)
 static void
 data_channel_on_message_string (GObject * dc, gchar * str, gpointer user_data)
 {
-  gst_print ("Received data channel message: %s\n", str);
+  //gst_print ("Received data channel message: %s\n", str);
+    if (p_sendrecv)
+        p_sendrecv->handleRecv(str);
 }
 
 static void
@@ -807,8 +816,7 @@ connect_data_channel_signals (GObject * data_channel)
 {
   g_signal_connect (data_channel, "on-error",
       G_CALLBACK (data_channel_on_error), NULL);
-  g_signal_connect (data_channel, "on-open", G_CALLBACK (data_channel_on_open),
-      NULL);
+  //g_signal_connect (data_channel, "on-open", G_CALLBACK (data_channel_on_open), NULL);
   g_signal_connect (data_channel, "on-close",
       G_CALLBACK (data_channel_on_close), NULL);
   g_signal_connect (data_channel, "on-message-string",
@@ -821,6 +829,17 @@ on_data_channel (GstElement * webrtc, GObject * data_channel,
 {
   connect_data_channel_signals (data_channel);
   receive_channel = data_channel;
+  if (p_sendrecv)
+  {
+      auto lam = [](const QString& s) {
+          auto line = s.toStdString();
+          if (!line.empty() && receive_channel)
+              g_signal_emit_by_name(receive_channel, "send-string", line.c_str());
+          };
+
+      p_sendrecv->setSendLambda(lam);
+  }
+
 }
 
 static void
@@ -1082,6 +1101,18 @@ start_pipeline (gboolean create_offer)
   if (send_channel) {
     gst_print ("Created data channel\n");
     connect_data_channel_signals (send_channel);
+
+    if (p_sendrecv)
+    {
+        auto lam = [](const QString& s) {
+            auto line = s.toStdString();
+            if (!line.empty() && send_channel)
+                g_signal_emit_by_name(send_channel, "send-string", line.c_str());
+        };
+
+        p_sendrecv->setSendLambda(lam);
+    }
+
   } else {
     gst_print ("Could not create data channel, is usrsctp available?\n");
   }
@@ -1351,13 +1382,15 @@ static gpointer glibMainLoopThreadFunc(gpointer /*unused*/)
 }
 
 
-bool start_sendrecv(unsigned long long winid, QSlider* volume_notifier)
+bool start_sendrecv(unsigned long long winid, QSlider* volume_notifier, ISendRecv* sendrecv)
 {
     if (loop == nullptr) {
         if (!check_plugins ())
             return false;
 
         xwinid = winid;
+
+        p_sendrecv = sendrecv;
 
         g_volume_notifier = volume_notifier;
 

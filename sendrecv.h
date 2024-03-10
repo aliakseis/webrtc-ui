@@ -2,6 +2,7 @@
 
 #include <glib.h>
 
+
 enum AppState
 {
   APP_STATE_UNKNOWN = 0,
@@ -36,5 +37,7 @@ void on_server_message(const gchar *text);
 gboolean
 start_pipeline(gboolean create_offer);
 
-bool start_sendrecv(unsigned long long winid, QSlider* volume_notifier);
+struct ISendRecv;
+
+bool start_sendrecv(unsigned long long winid, QSlider* volume_notifier, ISendRecv* sendrecv);
 

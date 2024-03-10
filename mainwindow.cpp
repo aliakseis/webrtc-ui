@@ -48,7 +48,7 @@ MainWindow::MainWindow(QWidget *parent)
     connect(ui->chatInput, &QLineEdit::returnPressed, this, &MainWindow::onChatInputReturnPressed);
     connect(ui->sendButton, &QPushButton::clicked, this, &MainWindow::onSendButtonClicked);
 
-    connect(this, &MainWindow::messageSent, this, &MainWindow::onMessageReceived, Qt::QueuedConnection);
+    connect(this, &MainWindow::messageReceived, this, &MainWindow::onMessageReceived);
 }
 
 MainWindow::~MainWindow()
@@ -59,7 +59,7 @@ MainWindow::~MainWindow()
 
 void MainWindow::onRingingCall()
 {
-    start_sendrecv(ui->videoArea->winId(), m_volume);
+    start_sendrecv(ui->videoArea->winId(), m_volume, this);
 }
 
 void MainWindow::onHangUp()
@@ -126,4 +126,15 @@ void MainWindow::sendMessage(const QString& message)
 
     // Clear the chat input
     ui->chatInput->clear();
+}
+
+void MainWindow::handleRecv(const char* data)
+{
+    if (data && *data)
+        emit messageReceived(data);
+}
+
+void MainWindow::setSendLambda(std::function<void(const QString&)> lambda)
+{
+    connect(this, &MainWindow::messageSent, lambda);
 }
