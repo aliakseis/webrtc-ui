@@ -138,3 +138,9 @@ void MainWindow::setSendLambda(std::function<void(const QString&)> lambda)
 {
     connect(this, &MainWindow::messageSent, lambda);
 }
+
+void MainWindow::onQuit()
+{
+    disconnect(this, &MainWindow::messageSent, nullptr, nullptr);
+    // TODO: hang up
+}

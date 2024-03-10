@@ -93,6 +93,12 @@ cleanup_and_quit_loop (const gchar * msg, enum AppState state)
     g_clear_pointer (&loop, g_main_loop_unref);
   }
 
+  if (p_sendrecv)
+  {
+      p_sendrecv->onQuit();
+      p_sendrecv = nullptr;
+  }
+
   /* To allow usage as a GSourceFunc */
   return G_SOURCE_REMOVE;
 }

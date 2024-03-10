@@ -57,5 +57,6 @@ private:
     // Inherited via ISendRecv
     void handleRecv(const char* data) override;
     void setSendLambda(std::function<void(const QString&)> lambda) override;
+    void onQuit() override;
 };
 #endif // MAINWINDOW_H
