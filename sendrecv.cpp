@@ -46,6 +46,184 @@
 #define GST_CAT_DEFAULT webrtc_sendrecv_debug
 GST_DEBUG_CATEGORY_STATIC (GST_CAT_DEFAULT);
 
+
+
+static gchar*
+get_string_from_json_object(JsonObject* object)
+{
+    JsonNode* root;
+    JsonGenerator* generator;
+    gchar* text;
+
+    /* Make it the root node */
+    root = json_node_init_object(json_node_alloc(), object);
+    generator = json_generator_new();
+    json_generator_set_root(generator, root);
+    text = json_generator_to_data(generator, nullptr);
+
+    /* Release everything */
+    g_object_unref(generator);
+    json_node_free(root);
+    return text;
+}
+
+
+
+#ifdef _WIN64
+#define DEFAULT_VIDEOSINK "d3d11videosink"
+#else
+#define DEFAULT_VIDEOSINK "d3dvideosink"
+#endif
+
+/* slightly convoluted way to find a working video sink that's not a bin,
+ * one could use autovideosink from gst-plugins-good instead
+ */
+static GstElement*
+find_video_sink()
+{
+    GstStateChangeReturn sret;
+    GstElement* sink;
+
+    if ((sink = gst_element_factory_make("xvimagesink", nullptr))) {
+        sret = gst_element_set_state(sink, GST_STATE_READY);
+        if (sret == GST_STATE_CHANGE_SUCCESS)
+            return sink;
+
+        gst_element_set_state(sink, GST_STATE_NULL);
+        gst_object_unref(sink);
+    }
+
+    if ((sink = gst_element_factory_make("ximagesink", nullptr))) {
+        sret = gst_element_set_state(sink, GST_STATE_READY);
+        if (sret == GST_STATE_CHANGE_SUCCESS)
+            return sink;
+
+        gst_element_set_state(sink, GST_STATE_NULL);
+        gst_object_unref(sink);
+    }
+
+    if (strcmp(DEFAULT_VIDEOSINK, "xvimagesink") == 0 ||
+        strcmp(DEFAULT_VIDEOSINK, "ximagesink") == 0)
+        return nullptr;
+
+    if ((sink = gst_element_factory_make(DEFAULT_VIDEOSINK, nullptr))) {
+        if (GST_IS_BIN(sink)) {
+            gst_object_unref(sink);
+            return nullptr;
+        }
+
+        sret = gst_element_set_state(sink, GST_STATE_READY);
+        if (sret == GST_STATE_CHANGE_SUCCESS)
+            return sink;
+
+        gst_element_set_state(sink, GST_STATE_NULL);
+        gst_object_unref(sink);
+    }
+
+    return nullptr;
+}
+
+static GstPadProbeReturn
+static_rtp_packet_loss_probe(GstPad* opad, GstPadProbeInfo* p_info, gpointer /*p_data*/)
+{
+    if (G_UNLIKELY((p_info->type & GST_PAD_PROBE_TYPE_EVENT_DOWNSTREAM) == 0))
+        return GST_PAD_PROBE_OK;
+
+    GstEvent* event = gst_pad_probe_info_get_event(p_info);
+    switch (GST_EVENT_TYPE(event))
+    {
+        //case GST_EVENT_CUSTOM_DOWNSTREAM:
+        //{
+        //    // rtpjitterbuffer (which is inside the rtpbin
+        //    // that is inside rtspsrc) generates this event.
+        //    // So far, there is no dedicated packet loss event
+        //    // type, and custom downstream events are used instead.
+        //    if (gst_event_has_name(event, "GstRTPPacketLost"))
+        //    {
+        //        GstStructure const *s = gst_event_get_structure(event);
+        //        guint num_packets = 1;
+
+        //        if (gst_structure_has_field(s, "num-packets"))
+        //            gst_structure_get_uint(s, "num-packets", &num_packets);
+
+        //        gst_print("detected %d lost or too-late packet(s)", num_packets);
+        //    }
+
+        //    break;
+        //}
+
+    case GST_EVENT_GAP:
+    {
+        static GstClockTime prev_ts{};
+        GstClockTime ts, dur;
+        gst_event_parse_gap(event, &ts, &dur);
+        if (prev_ts != ts)
+        {
+            prev_ts = ts;
+            GstClockTime end = ts;
+            if (ts != GST_CLOCK_TIME_NONE && dur != GST_CLOCK_TIME_NONE)
+                end += dur;
+            g_print("%s:%s Gap TS: %" GST_TIME_FORMAT " dur %" GST_TIME_FORMAT
+                " (to %" GST_TIME_FORMAT ")\n", GST_DEBUG_PAD_NAME(opad),
+                GST_TIME_ARGS(ts), GST_TIME_ARGS(dur), GST_TIME_ARGS(end));
+        }
+        break;
+    }
+
+    default:
+        break;
+    }
+
+    return GST_PAD_PROBE_OK;
+}
+
+
+static void
+disconnect(gpointer data,
+    GObject* where_the_object_was)
+{
+    auto c = static_cast<QMetaObject::Connection*>(data);
+    auto ok = QObject::disconnect(*c);
+    g_assert_true(ok);
+    delete c;
+}
+
+class GObjHandle
+{
+public:
+    GObjHandle(gpointer p)
+    {
+        g_weak_ref_init(&m_ref, p);
+    }
+    ~GObjHandle()
+    {
+        if (m_valid)
+            g_weak_ref_clear(&m_ref);
+    }
+    GObjHandle(GObjHandle&& other)  noexcept : m_ref(other.m_ref)
+    {
+        other.m_valid = false;
+    }
+    GObjHandle(const GObjHandle&) = delete;
+    GObjHandle operator =(const GObjHandle&) = delete;
+
+    auto get() const
+    {
+        auto ptr = g_weak_ref_get(&m_ref);
+        return MakeGuard(ptr, g_object_unref);
+    }
+
+private:
+    mutable GWeakRef m_ref;
+    bool m_valid = true;
+};
+
+
+
+
+////////////////////////////////////////////////////////////////////
+
+
 static GMainLoop *loop;
 static GstElement *pipe1, *webrtc1 = nullptr;
 static GObject *send_channel, *receive_channel;
@@ -103,233 +281,64 @@ cleanup_and_quit_loop (const gchar * msg, enum AppState state)
   return G_SOURCE_REMOVE;
 }
 
-static gchar *
-get_string_from_json_object (JsonObject * object)
-{
-  JsonNode *root;
-  JsonGenerator *generator;
-  gchar *text;
-
-  /* Make it the root node */
-  root = json_node_init_object (json_node_alloc (), object);
-  generator = json_generator_new ();
-  json_generator_set_root (generator, root);
-  text = json_generator_to_data (generator, nullptr);
-
-  /* Release everything */
-  g_object_unref (generator);
-  json_node_free (root);
-  return text;
-}
-
-
-
-#ifdef _WIN64
-#define DEFAULT_VIDEOSINK "d3d11videosink"
-#else
-#define DEFAULT_VIDEOSINK "d3dvideosink"
-#endif
-
-/* slightly convoluted way to find a working video sink that's not a bin,
- * one could use autovideosink from gst-plugins-good instead
- */
-static GstElement *
-find_video_sink ()
-{
-  GstStateChangeReturn sret;
-  GstElement *sink;
-
-  if ((sink = gst_element_factory_make ("xvimagesink", nullptr))) {
-    sret = gst_element_set_state (sink, GST_STATE_READY);
-    if (sret == GST_STATE_CHANGE_SUCCESS)
-      return sink;
-
-    gst_element_set_state (sink, GST_STATE_NULL);
-    gst_object_unref (sink);
-  }
-
-  if ((sink = gst_element_factory_make ("ximagesink", nullptr))) {
-    sret = gst_element_set_state (sink, GST_STATE_READY);
-    if (sret == GST_STATE_CHANGE_SUCCESS)
-      return sink;
-
-    gst_element_set_state (sink, GST_STATE_NULL);
-    gst_object_unref (sink);
-  }
-
-  if (strcmp (DEFAULT_VIDEOSINK, "xvimagesink") == 0 ||
-      strcmp (DEFAULT_VIDEOSINK, "ximagesink") == 0)
-    return nullptr;
-
-  if ((sink = gst_element_factory_make (DEFAULT_VIDEOSINK, nullptr))) {
-    if (GST_IS_BIN (sink)) {
-      gst_object_unref (sink);
-      return nullptr;
-    }
-
-    sret = gst_element_set_state (sink, GST_STATE_READY);
-    if (sret == GST_STATE_CHANGE_SUCCESS)
-      return sink;
-
-    gst_element_set_state (sink, GST_STATE_NULL);
-    gst_object_unref (sink);
-  }
-
-  return nullptr;
-}
-
-
-static GstPadProbeReturn
-static_rtp_packet_loss_probe(GstPad *opad, GstPadProbeInfo *p_info, gpointer /*p_data*/)
-{
-    if (G_UNLIKELY((p_info->type & GST_PAD_PROBE_TYPE_EVENT_DOWNSTREAM) == 0))
-        return GST_PAD_PROBE_OK;
-
-    GstEvent *event = gst_pad_probe_info_get_event(p_info);
-    switch (GST_EVENT_TYPE(event))
-    {
-    //case GST_EVENT_CUSTOM_DOWNSTREAM:
-    //{
-    //    // rtpjitterbuffer (which is inside the rtpbin
-    //    // that is inside rtspsrc) generates this event.
-    //    // So far, there is no dedicated packet loss event
-    //    // type, and custom downstream events are used instead.
-    //    if (gst_event_has_name(event, "GstRTPPacketLost"))
-    //    {
-    //        GstStructure const *s = gst_event_get_structure(event);
-    //        guint num_packets = 1;
-
-    //        if (gst_structure_has_field(s, "num-packets"))
-    //            gst_structure_get_uint(s, "num-packets", &num_packets);
-
-    //        gst_print("detected %d lost or too-late packet(s)", num_packets);
-    //    }
-
-    //    break;
-    //}
-
-    case GST_EVENT_GAP:
-    {
-        static GstClockTime prev_ts{};
-        GstClockTime ts, dur;
-        gst_event_parse_gap(event, &ts, &dur);
-        if (prev_ts != ts)
-        {
-            prev_ts = ts;
-            GstClockTime end = ts;
-            if (ts != GST_CLOCK_TIME_NONE && dur != GST_CLOCK_TIME_NONE)
-                end += dur;
-            g_print("%s:%s Gap TS: %" GST_TIME_FORMAT " dur %" GST_TIME_FORMAT
-                " (to %" GST_TIME_FORMAT ")\n", GST_DEBUG_PAD_NAME(opad),
-                GST_TIME_ARGS(ts), GST_TIME_ARGS(dur), GST_TIME_ARGS(end));
-        }
-        break;
-    }
-
-    default:
-        break;
-    }
-
-    return GST_PAD_PROBE_OK;
-}
-
-
 static void
-disconnect(gpointer data,
-    GObject *where_the_object_was)
-{
-    auto c = static_cast<QMetaObject::Connection*>(data);
-    auto ok = QObject::disconnect(*c);
-    g_assert_true(ok);
-    delete c;
-}
-
-class GObjHandle
-{
-public:
-    GObjHandle(gpointer p)
-    {
-        g_weak_ref_init(&m_ref, p);
-    }
-    ~GObjHandle()
-    {
-        if (m_valid)
-            g_weak_ref_clear(&m_ref);
-    }
-    GObjHandle(GObjHandle&& other)  noexcept : m_ref(other.m_ref)
-    {
-        other.m_valid = false;
-    }
-    GObjHandle(const GObjHandle&) = delete;
-    GObjHandle operator =(const GObjHandle&) = delete;
-
-    auto get() const
-    {
-        auto ptr = g_weak_ref_get(&m_ref);
-        return MakeGuard(ptr, g_object_unref);
-    }
-
-private:
-    mutable GWeakRef m_ref;
-    bool m_valid = true;
-};
-
-static void
-handle_media_stream (GstPad * pad, GstElement * pipe, const char *convert_name,
+handle_media_stream(GstPad* pad, GstElement* pipe, const char* convert_name,
     //const char *sink_name)
-                     GstElement* sink)
+    GstElement* sink)
 {
-  //gst_println ("Trying to handle stream with %s ! %s", convert_name, sink_name);
+    //gst_println ("Trying to handle stream with %s ! %s", convert_name, sink_name);
 
-  auto q = gst_element_factory_make ("queue", nullptr);
-  g_assert_nonnull (q);
-  auto conv = gst_element_factory_make (convert_name, nullptr);
-  g_assert_nonnull (conv);
-  //sink = gst_element_factory_make (sink_name, nullptr);
-  g_assert_nonnull (sink);
+    auto q = gst_element_factory_make("queue", nullptr);
+    g_assert_nonnull(q);
+    auto conv = gst_element_factory_make(convert_name, nullptr);
+    g_assert_nonnull(conv);
+    //sink = gst_element_factory_make (sink_name, nullptr);
+    g_assert_nonnull(sink);
 
-  if (g_strcmp0 (convert_name, "audioconvert") == 0) {
-    /* Might also need to resample, so add it just in case.
-     * Will be a no-op if it's not required. */
-    auto resample = gst_element_factory_make ("audioresample", nullptr);
-    g_assert_nonnull (resample);
+    if (g_strcmp0(convert_name, "audioconvert") == 0) {
+        /* Might also need to resample, so add it just in case.
+         * Will be a no-op if it's not required. */
+        auto resample = gst_element_factory_make("audioresample", nullptr);
+        g_assert_nonnull(resample);
 
-    auto volume = gst_element_factory_make("volume", nullptr);
-    auto c = new QMetaObject::Connection(
-        QObject::connect(g_volume_notifier, &QSlider::valueChanged, [ptr = GObjHandle(volume)](int v) {
+        auto volume = gst_element_factory_make("volume", nullptr);
+        auto c = new QMetaObject::Connection(
+            QObject::connect(g_volume_notifier, &QSlider::valueChanged, [ptr = GObjHandle(volume)](int v) {
                 if (auto obj = ptr.get())
                     g_object_set(obj.get(), "volume", v / 100., NULL);
-            })
-    );
-    g_object_weak_ref(G_OBJECT(volume), disconnect, c);
+                })
+        );
+        g_object_weak_ref(G_OBJECT(volume), disconnect, c);
 
-    gst_bin_add_many (GST_BIN (pipe), q, conv, resample, volume, sink, NULL);
-    gst_element_sync_state_with_parent (q);
-    gst_element_sync_state_with_parent (conv);
-    gst_element_sync_state_with_parent (resample);
-    gst_element_sync_state_with_parent(volume);
-    gst_element_sync_state_with_parent (sink);
-    gst_element_link_many (q, conv, resample, volume, sink, NULL);
-  } else {
-      // adding a probe for handling loss messages from rtpbin
-      gst_pad_add_probe(pad,
-          GST_PAD_PROBE_TYPE_EVENT_DOWNSTREAM,
-          static_rtp_packet_loss_probe,
-          nullptr,
-          nullptr);
+        gst_bin_add_many(GST_BIN(pipe), q, conv, resample, volume, sink, NULL);
+        gst_element_sync_state_with_parent(q);
+        gst_element_sync_state_with_parent(conv);
+        gst_element_sync_state_with_parent(resample);
+        gst_element_sync_state_with_parent(volume);
+        gst_element_sync_state_with_parent(sink);
+        gst_element_link_many(q, conv, resample, volume, sink, NULL);
+    }
+    else {
+        // adding a probe for handling loss messages from rtpbin
+        gst_pad_add_probe(pad,
+            GST_PAD_PROBE_TYPE_EVENT_DOWNSTREAM,
+            static_rtp_packet_loss_probe,
+            nullptr,
+            nullptr);
 
-    gst_bin_add_many (GST_BIN (pipe), q, conv, sink, NULL);
-    gst_element_sync_state_with_parent (q);
-    gst_element_sync_state_with_parent (conv);
-    gst_element_sync_state_with_parent (sink);
-    gst_element_link_many (q, conv, sink, NULL);
-  }
+        gst_bin_add_many(GST_BIN(pipe), q, conv, sink, NULL);
+        gst_element_sync_state_with_parent(q);
+        gst_element_sync_state_with_parent(conv);
+        gst_element_sync_state_with_parent(sink);
+        gst_element_link_many(q, conv, sink, NULL);
+    }
 
-  auto qpad = gst_element_get_static_pad (q, "sink");
+    auto qpad = gst_element_get_static_pad(q, "sink");
 
-  auto ret = gst_pad_link (pad, qpad);
-  g_assert_cmphex (ret, ==, GST_PAD_LINK_OK);
+    auto ret = gst_pad_link(pad, qpad);
+    g_assert_cmphex(ret, == , GST_PAD_LINK_OK);
 }
+
 
 static void
 on_incoming_decodebin_stream (GstElement * decodebin, GstPad * pad,
