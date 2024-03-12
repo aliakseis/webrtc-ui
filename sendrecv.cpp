@@ -991,6 +991,7 @@ static gboolean bus_call(GstBus * /*bus*/, GstMessage *msg, void *user_data)
     //        g_main_loop_quit(context->loop);
 
     //    return FALSE;
+        break;
     }
 
     //case GST_MESSAGE_EOS:
