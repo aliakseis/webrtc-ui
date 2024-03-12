@@ -823,7 +823,7 @@ data_channel_on_message_string (GObject * dc, gchar * str, gpointer user_data)
 {
   //gst_print ("Received data channel message: %s\n", str);
     if (p_sendrecv)
-        p_sendrecv->handleRecv(str);
+        p_sendrecv->handleRecv((uintptr_t)(void*) dc, str);
 }
 
 static void

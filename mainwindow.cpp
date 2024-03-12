@@ -128,10 +128,20 @@ void MainWindow::sendMessage(const QString& message)
     ui->chatInput->clear();
 }
 
-void MainWindow::handleRecv(const char* data)
+void MainWindow::handleRecv(uintptr_t id, const char* data)
 {
-    if (data && *data)
-        emit messageReceived(data);
+    if (!data || !(*data))
+        return;
+
+    if (id != m_channelId)
+    {
+        if (m_channelId == 0)
+            m_channelId = id;
+        else
+            return;
+    }
+
+    emit messageReceived(data);
 }
 
 void MainWindow::setSendLambda(std::function<void(const QString&)> lambda)
@@ -142,5 +152,6 @@ void MainWindow::setSendLambda(std::function<void(const QString&)> lambda)
 void MainWindow::onQuit()
 {
     disconnect(this, &MainWindow::messageSent, nullptr, nullptr);
+    m_channelId = 0;
     // TODO: hang up
 }

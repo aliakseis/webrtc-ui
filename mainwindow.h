@@ -54,8 +54,10 @@ private:
     MainToolBar* m_mainToolbar;
     QSlider* m_volume;
 
+    uintptr_t m_channelId = 0;
+
     // Inherited via ISendRecv
-    void handleRecv(const char* data) override;
+    void handleRecv(uintptr_t id, const char* data) override;
     void setSendLambda(std::function<void(const QString&)> lambda) override;
     void onQuit() override;
 };
