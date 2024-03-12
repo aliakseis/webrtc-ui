@@ -247,11 +247,35 @@ gchar* splitmuxsink_on_format_location_full(GstElement* splitmux,
 ////////////////////////////////////////////////////////////////////
 
 
+enum AppState
+{
+    APP_STATE_UNKNOWN = 0,
+    APP_STATE_ERROR = 1,          /* generic error */
+    SERVER_CONNECTING = 1000,
+    SERVER_CONNECTION_ERROR,
+    SERVER_CONNECTED,             /* Ready to register */
+    SERVER_REGISTERING = 2000,
+    SERVER_REGISTRATION_ERROR,
+    SERVER_REGISTERED,            /* Ready to call a peer */
+    SERVER_CLOSED,                /* server connection closed by us or the server */
+    PEER_CONNECTING = 3000,
+    PEER_CONNECTION_ERROR,
+    PEER_CONNECTED,
+    PEER_CALL_NEGOTIATING = 4000,
+    PEER_CALL_STARTED,
+    PEER_CALL_STOPPING,
+    PEER_CALL_STOPPED,
+    PEER_CALL_ERROR,
+    HANG_UP
+};
+
+
+
 static GMainLoop *loop;
 static GstElement *pipe1, *webrtc1 = nullptr;
 static GObject *send_channel, *receive_channel;
 
-AppState app_state = APP_STATE_UNKNOWN;
+static AppState app_state = APP_STATE_UNKNOWN;
 
 static guint webrtcbin_get_stats_id = 0;
 
@@ -273,8 +297,16 @@ static std::unique_ptr<ISignalingConnection> signaling_connection;
 
 ////////////////////////////////////////////////////////////////////
 
+bool set_connected()
+{
+    if (app_state < PEER_CONNECTED) {
+        app_state = PEER_CONNECTED;
+        return true;
+    }
+    return false;
+}
 
-gboolean
+static gboolean
 cleanup_and_quit_loop (const gchar * msg, enum AppState state)
 {
   if (msg)
@@ -302,6 +334,11 @@ cleanup_and_quit_loop (const gchar * msg, enum AppState state)
 
   /* To allow usage as a GSourceFunc */
   return G_SOURCE_REMOVE;
+}
+
+void cleanup_and_quit_loop(const gchar* msg, bool is_error)
+{
+    cleanup_and_quit_loop(msg, is_error ? PEER_CALL_ERROR : HANG_UP);
 }
 
 static void

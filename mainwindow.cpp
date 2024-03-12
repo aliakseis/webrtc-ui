@@ -53,7 +53,7 @@ MainWindow::MainWindow(QWidget *parent)
 
 MainWindow::~MainWindow()
 {
-    cleanup_and_quit_loop("hand up", HANG_UP);
+    cleanup_and_quit_loop("hand up", false);
     delete ui;
 }
 
@@ -64,7 +64,7 @@ void MainWindow::onRingingCall()
 
 void MainWindow::onHangUp()
 {
-    cleanup_and_quit_loop("hand up", HANG_UP);
+    cleanup_and_quit_loop("hand up", false);
 }
 
 void MainWindow::onHelp()

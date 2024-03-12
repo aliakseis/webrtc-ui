@@ -130,12 +130,10 @@ protected:
                                             send_text("ACK");
 
                                         if (is_syn || g_strcmp0(message, "ACK") == 0) {
-                                            if (app_state < PEER_CONNECTED) {
-                                                app_state = PEER_CONNECTED;
+                                            if (set_connected()) {
                                                 /* Start negotiation (exchange SDP and ICE candidates) */
                                                 if (we_create_offer() && !start_pipeline(TRUE))
-                                                    cleanup_and_quit_loop("ERROR: failed to start pipeline",
-                                                        PEER_CALL_ERROR);
+                                                    cleanup_and_quit_loop("ERROR: failed to start pipeline", true);
                                             }
                                         }
                                         else
