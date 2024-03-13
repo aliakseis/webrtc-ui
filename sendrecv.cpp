@@ -232,7 +232,7 @@ static auto prepare_next_file_name() {
     return QFile::encodeName(path);// .constData();
 }
 
-gchar* splitmuxsink_on_format_location_full(GstElement* splitmux,
+static gchar* splitmuxsink_on_format_location_full(GstElement* splitmux,
     guint fragment_id,
     GstSample* first_sample,
     gpointer user_data) {
@@ -242,6 +242,29 @@ gchar* splitmuxsink_on_format_location_full(GstElement* splitmux,
     return g_strdup_printf("%s", nextfilename.constData());
 }
 
+static gboolean
+check_plugins()
+{
+    gboolean ret;
+    GstPlugin* plugin;
+    GstRegistry* registry;
+    const gchar* needed[] = { "opus", "vpx", "nice", "webrtc", "dtls", "srtp",
+      "rtpmanager", "videotestsrc", "audiotestsrc", nullptr
+    };
+
+    registry = gst_registry_get();
+    ret = TRUE;
+    for (guint i = 0; i < g_strv_length((gchar**)needed); i++) {
+        plugin = gst_registry_find_plugin(registry, needed[i]);
+        if (!plugin) {
+            gst_print("Required gstreamer plugin '%s' not found\n", needed[i]);
+            ret = FALSE;
+            continue;
+        }
+        gst_object_unref(plugin);
+    }
+    return ret;
+}
 
 
 ////////////////////////////////////////////////////////////////////
@@ -269,33 +292,42 @@ enum AppState
     HANG_UP
 };
 
-
-
-static GMainLoop *loop;
-static GstElement *pipe1, *webrtc1 = nullptr;
-static GObject *send_channel, *receive_channel;
-
-static AppState app_state = APP_STATE_UNKNOWN;
-
-static guint webrtcbin_get_stats_id = 0;
-
 const static gboolean remote_is_offerer = FALSE;
 
-static std::vector<std::pair<int, std::string>> ice_candidates;
+class SendRecv {
 
-static guintptr xwinid;
+GMainLoop *loop = nullptr;
+GstElement *pipe1 = nullptr;
+GstElement *webrtc1 = nullptr;
+GObject *send_channel = nullptr;
+GObject *receive_channel = nullptr;
 
-static QSlider* g_volume_notifier;
+AppState app_state = APP_STATE_UNKNOWN;
 
-static ISendRecv* p_sendrecv = nullptr;
+guint webrtcbin_get_stats_id = 0;
+
+std::vector<std::pair<int, std::string>> ice_candidates;
+
+guintptr xwinid{};
+
+QSlider* g_volume_notifier = nullptr;
+
+ISendRecv* p_sendrecv = nullptr;
+
+
+
+std::unique_ptr<ISignalingConnection> signaling_connection;
+
+GThread* gthread = nullptr;
+
+GstClockTime last_video_pts{};
+
+std::mutex mtx;
+
 
 ////////////////////////////////////////////////////////////////////
 
-
-static std::unique_ptr<ISignalingConnection> signaling_connection;
-
-
-////////////////////////////////////////////////////////////////////
+public:
 
 bool set_connected()
 {
@@ -306,8 +338,7 @@ bool set_connected()
     return false;
 }
 
-static gboolean
-cleanup_and_quit_loop (const gchar * msg, enum AppState state)
+gboolean cleanup_and_quit_loop (const gchar * msg, enum AppState state)
 {
   if (msg)
     gst_printerr ("%s\n", msg);
@@ -341,8 +372,7 @@ void cleanup_and_quit_loop(const gchar* msg, bool is_error)
     cleanup_and_quit_loop(msg, is_error ? PEER_CALL_ERROR : HANG_UP);
 }
 
-static void
-handle_media_stream(GstPad* pad, GstElement* pipe, const char* convert_name,
+void handle_media_stream(GstPad* pad, GstElement* pipe, const char* convert_name,
     //const char *sink_name)
     GstElement* sink)
 {
@@ -402,10 +432,9 @@ handle_media_stream(GstPad* pad, GstElement* pipe, const char* convert_name,
 
 static void
 on_incoming_decodebin_stream (GstElement * decodebin, GstPad * pad,
-    GstElement * pipe)
+    gpointer user_data)
 {
-  GstCaps *caps;
-  const gchar *name;
+    auto self = static_cast<SendRecv*>(user_data);
 
   if (!gst_pad_has_current_caps (pad)) {
     gst_printerr ("Pad '%s' has no caps, can't do anything, ignoring\n",
@@ -413,8 +442,8 @@ on_incoming_decodebin_stream (GstElement * decodebin, GstPad * pad,
     return;
   }
 
-  caps = gst_pad_get_current_caps (pad);
-  name = gst_structure_get_name (gst_caps_get_structure (caps, 0));
+  auto caps = gst_pad_get_current_caps (pad);
+  auto name = gst_structure_get_name (gst_caps_get_structure (caps, 0));
 
   auto str = gst_caps_to_string(caps);
   g_print("on_incoming_decodebin_stream pad caps: %s\n", str);
@@ -422,19 +451,18 @@ on_incoming_decodebin_stream (GstElement * decodebin, GstPad * pad,
 
   if (g_str_has_prefix (name, "video")) {
     auto sink = find_video_sink();
-    handle_media_stream (pad, pipe, "videoconvert", sink);//"autovideosink");
-    gst_video_overlay_set_window_handle (GST_VIDEO_OVERLAY (sink), xwinid);
+    self->handle_media_stream (pad, self->pipe1, "videoconvert", sink);//"autovideosink");
+    gst_video_overlay_set_window_handle (GST_VIDEO_OVERLAY (sink), self->xwinid);
   } else if (g_str_has_prefix (name, "audio")) {
-    handle_media_stream (pad, pipe, "audioconvert", gst_element_factory_make("autoaudiosink", nullptr));
+      self->handle_media_stream (pad, self->pipe1, "audioconvert", gst_element_factory_make("autoaudiosink", nullptr));
   } else {
     gst_printerr ("Unknown pad %s, ignoring", GST_PAD_NAME (pad));
   }
 }
 
 
-static GstElement* get_file_sink(GstBin* pipe)
+GstElement* get_file_sink(GstBin* pipe)
 {
-    static std::mutex mtx;
     std::unique_lock<std::mutex> lock(mtx);
 
     const char file_sink_name[] = "file_sink";
@@ -462,7 +490,7 @@ static GstElement* get_file_sink(GstBin* pipe)
         g_signal_connect(splitmuxsink, "format-location-full",
             G_CALLBACK(splitmuxsink_on_format_location_full), NULL);
 
-        auto ok = gst_bin_add(GST_BIN(pipe1), splitmuxsink);
+        auto ok = gst_bin_add(GST_BIN(pipe), splitmuxsink);
         g_assert_true(ok);
 
         ok = gst_element_sync_state_with_parent(splitmuxsink);
@@ -472,14 +500,14 @@ static GstElement* get_file_sink(GstBin* pipe)
     }
     
     auto muxer = gst_element_factory_make(muxerName, file_sink_name);
-    auto ok = gst_bin_add(GST_BIN(pipe1), muxer);
+    auto ok = gst_bin_add(GST_BIN(pipe), muxer);
     g_assert_true(ok);
 
     ok = gst_element_sync_state_with_parent(muxer);
     g_assert_true(ok);
 
     auto filesink = gst_element_factory_make("filesink", nullptr);
-    ok = gst_bin_add(GST_BIN(pipe1), filesink);
+    ok = gst_bin_add(GST_BIN(pipe), filesink);
     g_assert_true(ok);
 
     auto nextfilename = prepare_next_file_name();
@@ -501,7 +529,6 @@ static GstElement* get_file_sink(GstBin* pipe)
     return muxer;
 }
 
-static GstClockTime last_video_pts{};
 
 // https://stackoverflow.com/questions/29107370/gstreamer-timestamps-pts-are-not-monotonically-increasing-for-captured-frames
 static GstPadProbeReturn
@@ -509,18 +536,19 @@ gst_pad_probe_callback(GstPad * pad,
     GstPadProbeInfo * info,
     gpointer user_data)
 {
+    auto self = static_cast<SendRecv*>(user_data);
 
     auto buffer = gst_pad_probe_info_get_buffer(info);
 
     auto pts = buffer->pts;
-    if (pts <= last_video_pts)
+    if (pts <= self->last_video_pts)
     {
-        g_print("Out-of-order pts: %lld; the last pts: %lld.\n", pts, last_video_pts);
+        g_print("Out-of-order pts: %lld; the last pts: %lld.\n", pts, self->last_video_pts);
         //return GST_PAD_PROBE_DROP;
-        buffer->pts = last_video_pts;
+        buffer->pts = self->last_video_pts;
         return GST_PAD_PROBE_OK;
     }
-    last_video_pts = pts;
+    self->last_video_pts = pts;
 
     return GST_PAD_PROBE_OK;
 }
@@ -553,15 +581,17 @@ gst_pad_audio_probe_callback(GstPad * pad,
 */
 
 static void
-on_incoming_stream (GstElement * webrtc, GstPad * pad, GstElement * pipe)
+on_incoming_stream (GstElement * webrtc, GstPad * pad, gpointer user_data)
 {
   if (GST_PAD_DIRECTION (pad) != GST_PAD_SRC)
     return;
 
+  auto self = static_cast<SendRecv*>(user_data);
+
   auto decodebin = gst_element_factory_make ("decodebin", nullptr);
   g_signal_connect (decodebin, "pad-added",
-      G_CALLBACK (on_incoming_decodebin_stream), pipe);
-  gst_bin_add (GST_BIN (pipe), decodebin);
+      G_CALLBACK (on_incoming_decodebin_stream), self);
+  gst_bin_add (GST_BIN (self->pipe1), decodebin);
   gst_element_sync_state_with_parent (decodebin);
 
   auto caps = gst_pad_get_current_caps(pad);
@@ -579,7 +609,7 @@ on_incoming_stream (GstElement * webrtc, GstPad * pad, GstElement * pipe)
   if (payload == 96 || payload == 97)
   {
       auto tee = gst_element_factory_make("tee", nullptr);// "tee");
-      gst_bin_add(GST_BIN(pipe), tee);
+      gst_bin_add(GST_BIN(self->pipe1), tee);
       gst_element_sync_state_with_parent(tee);
 
       {
@@ -601,7 +631,7 @@ on_incoming_stream (GstElement * webrtc, GstPad * pad, GstElement * pipe)
           (payload == 96) ? "rtpvp8depay" : "rtpopusdepay",
           nullptr);// "rtpvp8depay");
 
-      auto ok = gst_bin_add(GST_BIN(pipe1), rtpvp8depay);
+      auto ok = gst_bin_add(GST_BIN(self->pipe1), rtpvp8depay);
       g_assert_true(ok);
 
       ok = gst_element_sync_state_with_parent(rtpvp8depay);
@@ -609,17 +639,17 @@ on_incoming_stream (GstElement * webrtc, GstPad * pad, GstElement * pipe)
 
       auto queue = gst_element_factory_make("queue", nullptr);
 
-      ok = gst_bin_add(GST_BIN(pipe1), queue);
+      ok = gst_bin_add(GST_BIN(self->pipe1), queue);
       g_assert_true(ok);
 
       ok = gst_element_sync_state_with_parent(queue);
       g_assert_true(ok);
 
-      auto sink = get_file_sink(GST_BIN(pipe1));
+      auto sink = self->get_file_sink(GST_BIN(self->pipe1));
 
       if (payload == 96)
       {
-        last_video_pts = {};
+        self->last_video_pts = {};
 
         //auto identity = gst_element_factory_make("identity", nullptr);
 
@@ -630,7 +660,7 @@ on_incoming_stream (GstElement * webrtc, GstPad * pad, GstElement * pipe)
         //g_assert_true(ok);
 
         auto srcpad = gst_element_get_static_pad(rtpvp8depay, "src");
-        gst_pad_add_probe(srcpad, GST_PAD_PROBE_TYPE_BUFFER, gst_pad_probe_callback, nullptr, nullptr);
+        gst_pad_add_probe(srcpad, GST_PAD_PROBE_TYPE_BUFFER, gst_pad_probe_callback, self, nullptr);
 
         ok = gst_element_link_many(tee,
             //rtpjitterbuffer,
@@ -648,21 +678,21 @@ on_incoming_stream (GstElement * webrtc, GstPad * pad, GstElement * pipe)
 
           //*
           auto opusdec = gst_element_factory_make("opusdec", nullptr);
-          ok = gst_bin_add(GST_BIN(pipe1), opusdec);
+          ok = gst_bin_add(GST_BIN(self->pipe1), opusdec);
           g_assert_true(ok);
           ok = gst_element_sync_state_with_parent(opusdec);
           g_assert_true(ok);
 
           //audiorate
           auto audiorate = gst_element_factory_make("audiorate", nullptr);
-          ok = gst_bin_add(GST_BIN(pipe1), audiorate);
+          ok = gst_bin_add(GST_BIN(self->pipe1), audiorate);
           g_assert_true(ok);
           ok = gst_element_sync_state_with_parent(audiorate);
           g_assert_true(ok);
 
           //opusenc
           auto opusenc = gst_element_factory_make("opusenc", nullptr);
-          ok = gst_bin_add(GST_BIN(pipe1), opusenc);
+          ok = gst_bin_add(GST_BIN(self->pipe1), opusenc);
           g_assert_true(ok);
           ok = gst_element_sync_state_with_parent(opusenc);
           g_assert_true(ok);
@@ -722,14 +752,14 @@ send_ice_candidate_message (GstElement * webrtc G_GNUC_UNUSED, guint mlineindex,
 
 static void
 send_ice_candidate_message(GstElement * webrtc G_GNUC_UNUSED, guint mlineindex,
-    gchar * candidate, gpointer user_data G_GNUC_UNUSED)
+    gchar * candidate, gpointer user_data)
 {
-    ice_candidates.emplace_back( mlineindex, candidate );
+    auto self = static_cast<SendRecv*>(user_data);
+    self->ice_candidates.emplace_back( mlineindex, candidate );
 }
 
 
-static void
-send_candidates()
+void send_candidates()
 {
     auto ar = json_array_new();
 
@@ -753,8 +783,7 @@ send_candidates()
 }
 
 
-static void
-send_sdp_to_peer (GstWebRTCSessionDescription * desc)
+void send_sdp_to_peer (GstWebRTCSessionDescription * desc)
 {
   if (app_state < PEER_CALL_NEGOTIATING) {
     cleanup_and_quit_loop ("Can't send SDP to peer, not in call",
@@ -791,10 +820,12 @@ send_sdp_to_peer (GstWebRTCSessionDescription * desc)
 static void
 on_offer_created (GstPromise * promise, gpointer user_data)
 {
+    auto self = static_cast<SendRecv*>(user_data);
+
   GstWebRTCSessionDescription *offer = nullptr;
   const GstStructure *reply;
 
-  g_assert_cmphex (app_state, ==, PEER_CALL_NEGOTIATING);
+  g_assert_cmphex (self->app_state, ==, PEER_CALL_NEGOTIATING);
 
   g_assert_cmphex (gst_promise_wait (promise), ==, GST_PROMISE_RESULT_REPLIED);
   reply = gst_promise_get_reply (promise);
@@ -803,28 +834,41 @@ on_offer_created (GstPromise * promise, gpointer user_data)
   gst_promise_unref (promise);
 
   promise = gst_promise_new ();
-  g_signal_emit_by_name (webrtc1, "set-local-description", offer, promise);
+  g_signal_emit_by_name (self->webrtc1, "set-local-description", offer, promise);
   gst_promise_interrupt (promise);
   gst_promise_unref (promise);
 
   /* Send offer to peer */
-  send_sdp_to_peer (offer);
+  self->send_sdp_to_peer (offer);
   gst_webrtc_session_description_free (offer);
 }
 
-static void
-on_negotiation_needed (GstElement * element, gpointer user_data)
+void on_negotiation_needed (GstElement * element, bool create_offer)
 {
-  gboolean create_offer = GPOINTER_TO_INT (user_data);
+  //gboolean create_offer = GPOINTER_TO_INT (user_data);
   app_state = PEER_CALL_NEGOTIATING;
 
   if (remote_is_offerer) {
       signaling_connection->send_text("OFFER_REQUEST");
   } else if (create_offer) {
     GstPromise *promise =
-        gst_promise_new_with_change_func (on_offer_created, nullptr, nullptr);
+        gst_promise_new_with_change_func (on_offer_created, this, nullptr);
     g_signal_emit_by_name (webrtc1, "create-offer", NULL, promise);
   }
+}
+
+static void
+on_negotiation_needed_true(GstElement* element, gpointer user_data)
+{
+    auto self = static_cast<SendRecv*>(user_data);
+    self->on_negotiation_needed(element, true);
+}
+
+static void
+on_negotiation_needed_false(GstElement* element, gpointer user_data)
+{
+    auto self = static_cast<SendRecv*>(user_data);
+    self->on_negotiation_needed(element, false);
 }
 
 #define STUN_SERVER " stun-server=stun://stun.l.google.com:19302 "
@@ -834,7 +878,8 @@ on_negotiation_needed (GstElement * element, gpointer user_data)
 static void
 data_channel_on_error (GObject * dc, gpointer user_data)
 {
-  cleanup_and_quit_loop ("Data channel error", APP_STATE_UNKNOWN);
+    auto self = static_cast<SendRecv*>(user_data);
+    self->cleanup_and_quit_loop ("Data channel error", APP_STATE_UNKNOWN);
 }
 
 /*
@@ -852,44 +897,48 @@ data_channel_on_open (GObject * dc, gpointer user_data)
 static void
 data_channel_on_close (GObject * dc, gpointer user_data)
 {
-  cleanup_and_quit_loop ("Data channel closed", APP_STATE_UNKNOWN);
+    auto self = static_cast<SendRecv*>(user_data);
+    self->cleanup_and_quit_loop ("Data channel closed", APP_STATE_UNKNOWN);
 }
 
 static void
 data_channel_on_message_string (GObject * dc, gchar * str, gpointer user_data)
 {
+    auto self = static_cast<SendRecv*>(user_data);
+
   //gst_print ("Received data channel message: %s\n", str);
-    if (p_sendrecv)
-        p_sendrecv->handleRecv((uintptr_t)(void*) dc, str);
+    if (self->p_sendrecv)
+        self->p_sendrecv->handleRecv((uintptr_t)(void*) dc, str);
 }
 
-static void
-connect_data_channel_signals (GObject * data_channel)
+void connect_data_channel_signals (GObject * data_channel)
 {
   g_signal_connect (data_channel, "on-error",
-      G_CALLBACK (data_channel_on_error), NULL);
+      G_CALLBACK (data_channel_on_error), this);
   //g_signal_connect (data_channel, "on-open", G_CALLBACK (data_channel_on_open), NULL);
   g_signal_connect (data_channel, "on-close",
-      G_CALLBACK (data_channel_on_close), NULL);
+      G_CALLBACK (data_channel_on_close), this);
   g_signal_connect (data_channel, "on-message-string",
-      G_CALLBACK (data_channel_on_message_string), NULL);
+      G_CALLBACK (data_channel_on_message_string), this);
 }
 
 static void
 on_data_channel (GstElement * webrtc, GObject * data_channel,
     gpointer user_data)
 {
-  connect_data_channel_signals (data_channel);
-  receive_channel = data_channel;
-  if (p_sendrecv)
+    auto self = static_cast<SendRecv*>(user_data);
+
+  self->connect_data_channel_signals (data_channel);
+  self->receive_channel = data_channel;
+  if (self->p_sendrecv)
   {
-      auto lam = [](const QString& s) {
+      auto lam = [self](const QString& s) {
           auto line = s.toStdString();
-          if (!line.empty() && receive_channel)
-              g_signal_emit_by_name(receive_channel, "send-string", line.c_str());
+          if (!line.empty() && self->receive_channel)
+              g_signal_emit_by_name(self->receive_channel, "send-string", line.c_str());
           };
 
-      p_sendrecv->setSendLambda(lam);
+      self->p_sendrecv->setSendLambda(lam);
   }
 
 }
@@ -898,6 +947,8 @@ static void
 on_ice_gathering_state_notify (GstElement * webrtcbin, GParamSpec * pspec,
     gpointer user_data)
 {
+    auto self = static_cast<SendRecv*>(user_data);
+
   GstWebRTCICEGatheringState ice_gather_state;
   const gchar *new_state = "unknown";
 
@@ -911,7 +962,7 @@ on_ice_gathering_state_notify (GstElement * webrtcbin, GParamSpec * pspec,
       break;
     case GST_WEBRTC_ICE_GATHERING_STATE_COMPLETE:
       new_state = "complete";
-      send_candidates();
+      self->send_candidates();
       break;
   }
   gst_print ("ICE gathering state changed to %s\n", new_state);
@@ -951,7 +1002,7 @@ on_ice_connection_state_notify(GstElement * webrtcbin, GParamSpec * pspec,
     gst_print("ICE connection state changed to %s\n", new_state);
 }
 
-static gboolean webrtcbin_get_stats (GstElement * webrtcbin);
+//static gboolean webrtcbin_get_stats (GstElement * webrtcbin);
 
 static gboolean
 on_webrtcbin_stat (GQuark field_id, const GValue * value, gpointer unused)
@@ -968,8 +1019,10 @@ on_webrtcbin_stat (GQuark field_id, const GValue * value, gpointer unused)
 }
 
 static void
-on_webrtcbin_get_stats (GstPromise * promise, GstElement * webrtcbin)
+on_webrtcbin_get_stats (GstPromise * promise, void* user_data)
 {
+    auto self = static_cast<SendRecv*>(user_data);
+
   const GstStructure *stats;
 
   g_return_if_fail (gst_promise_wait (promise) == GST_PROMISE_RESULT_REPLIED);
@@ -977,20 +1030,20 @@ on_webrtcbin_get_stats (GstPromise * promise, GstElement * webrtcbin)
   stats = gst_promise_get_reply (promise);
   gst_structure_foreach (stats, on_webrtcbin_stat, nullptr);
 
-  webrtcbin_get_stats_id = g_timeout_add (100, (GSourceFunc) webrtcbin_get_stats, webrtcbin);
+  self->webrtcbin_get_stats_id = g_timeout_add (100, (GSourceFunc) webrtcbin_get_stats, self);
 }
 
 static gboolean
-webrtcbin_get_stats (GstElement * webrtcbin)
+webrtcbin_get_stats (void* user_data)
 {
-  GstPromise *promise;
-
-  promise =
+    auto self = static_cast<SendRecv*>(user_data);
+    
+    GstPromise *promise =
       gst_promise_new_with_change_func (
-      (GstPromiseChangeFunc) on_webrtcbin_get_stats, webrtcbin, nullptr);
+      (GstPromiseChangeFunc) on_webrtcbin_get_stats, self, nullptr);
 
-  GST_TRACE ("emitting get-stats on %" GST_PTR_FORMAT, webrtcbin);
-  g_signal_emit_by_name (webrtcbin, "get-stats", NULL, promise);
+  GST_TRACE ("emitting get-stats on %" GST_PTR_FORMAT, self->webrtc1);
+  g_signal_emit_by_name (self->webrtc1, "get-stats", NULL, promise);
   gst_promise_unref (promise);
 
   return G_SOURCE_REMOVE;
@@ -1007,6 +1060,8 @@ on_new_transceiver(GstElement * webrtc, GstWebRTCRTPTransceiver * trans)
 
 static gboolean bus_call(GstBus * /*bus*/, GstMessage *msg, void *user_data)
 {
+    auto self = static_cast<SendRecv*>(user_data);
+
     switch (GST_MESSAGE_TYPE(msg))
     {
     case GST_MESSAGE_ERROR:
@@ -1043,7 +1098,7 @@ static gboolean bus_call(GstBus * /*bus*/, GstMessage *msg, void *user_data)
     {
         // when pipeline latency is changed, this msg is posted on the bus. we then have
         // to explicitly tell the pipeline to recalculate its latency
-        if (pipe1 && !gst_bin_recalculate_latency(GST_BIN(pipe1)))
+        if (self->pipe1 && !gst_bin_recalculate_latency(GST_BIN(self->pipe1)))
             g_print("Could not reconfigure latency.\n");
         else
             g_print("Reconfigured latency.\n");
@@ -1096,7 +1151,7 @@ start_pipeline (gboolean create_offer)
 
   // add bus call
   GstBus *bus = gst_pipeline_get_bus(GST_PIPELINE(pipe1));
-  gst_bus_add_watch(bus, bus_call, nullptr);
+  gst_bus_add_watch(bus, bus_call, this);
   gst_object_unref(bus);
 
   webrtc1 = gst_bin_get_by_name (GST_BIN (pipe1), "sendrecv");
@@ -1110,7 +1165,7 @@ start_pipeline (gboolean create_offer)
         "reciving a remote offers");
   } else {
 
-    auto lam = [] (const gchar* name) {
+    auto lam = [this] (const gchar* name) {
         auto videopay = gst_bin_get_by_name(GST_BIN(pipe1), name);
         g_assert_nonnull(videopay);
         auto video_twcc = gst_rtp_header_extension_create_from_uri(RTP_TWCC_URI);
@@ -1128,14 +1183,15 @@ start_pipeline (gboolean create_offer)
   /* This is the gstwebrtc entry point where we create the offer and so on. It
    * will be called when the pipeline goes to PLAYING. */
   g_signal_connect (webrtc1, "on-negotiation-needed",
-      G_CALLBACK (on_negotiation_needed), GINT_TO_POINTER (create_offer));
+      create_offer? G_CALLBACK (on_negotiation_needed_true) : G_CALLBACK(on_negotiation_needed_false),
+      this);
   /* We need to transmit this ICE candidate to the browser via the websockets
    * signalling server. Incoming ice candidates from the browser need to be
    * added by us too, see on_server_message() */
   g_signal_connect (webrtc1, "on-ice-candidate",
-      G_CALLBACK (send_ice_candidate_message), NULL);
+      G_CALLBACK (send_ice_candidate_message), this);
   g_signal_connect (webrtc1, "notify::ice-gathering-state",
-      G_CALLBACK (on_ice_gathering_state_notify), NULL);
+      G_CALLBACK (on_ice_gathering_state_notify), this);
   g_signal_connect(webrtc1, "on-new-transceiver",
       G_CALLBACK(on_new_transceiver), NULL);
   g_signal_connect(webrtc1, "notify::ice-connection-state",
@@ -1157,7 +1213,7 @@ start_pipeline (gboolean create_offer)
 
     if (p_sendrecv)
     {
-        auto lam = [](const QString& s) {
+        auto lam = [this](const QString& s) {
             auto line = s.toStdString();
             if (!line.empty() && send_channel)
                 g_signal_emit_by_name(send_channel, "send-string", line.c_str());
@@ -1170,15 +1226,13 @@ start_pipeline (gboolean create_offer)
     gst_print ("Could not create data channel, is usrsctp available?\n");
   }
 
-  g_signal_connect (webrtc1, "on-data-channel", G_CALLBACK (on_data_channel),
-      NULL);
+  g_signal_connect (webrtc1, "on-data-channel", G_CALLBACK (on_data_channel), this);
   /* Incoming streams will be exposed via this signal */
-  g_signal_connect (webrtc1, "pad-added", G_CALLBACK (on_incoming_stream),
-      pipe1);
+  g_signal_connect (webrtc1, "pad-added", G_CALLBACK (on_incoming_stream), this);
   /* Lifetime is the same as the pipeline itself */
   gst_object_unref (webrtc1);
 
-  webrtcbin_get_stats_id = g_timeout_add (100, (GSourceFunc) webrtcbin_get_stats, webrtc1);
+  webrtcbin_get_stats_id = g_timeout_add (100, (GSourceFunc) webrtcbin_get_stats, this);
 
   gst_print ("Starting pipeline\n");
   ret = gst_element_set_state (GST_ELEMENT (pipe1), GST_STATE_PLAYING);
@@ -1200,10 +1254,12 @@ err:
 static void
 on_answer_created (GstPromise * promise, gpointer user_data)
 {
+    auto self = static_cast<SendRecv*>(user_data);
+
   GstWebRTCSessionDescription *answer = nullptr;
   const GstStructure *reply;
 
-  g_assert_cmphex (app_state, ==, PEER_CALL_NEGOTIATING);
+  g_assert_cmphex (self->app_state, ==, PEER_CALL_NEGOTIATING);
 
   g_assert_cmphex (gst_promise_wait (promise), ==, GST_PROMISE_RESULT_REPLIED);
   reply = gst_promise_get_reply (promise);
@@ -1212,25 +1268,26 @@ on_answer_created (GstPromise * promise, gpointer user_data)
   gst_promise_unref (promise);
 
   promise = gst_promise_new ();
-  g_signal_emit_by_name (webrtc1, "set-local-description", answer, promise);
+  g_signal_emit_by_name (self->webrtc1, "set-local-description", answer, promise);
   gst_promise_interrupt (promise);
   gst_promise_unref (promise);
 
   /* Send answer to peer */
-  send_sdp_to_peer (answer);
+  self->send_sdp_to_peer (answer);
   gst_webrtc_session_description_free (answer);
 }
 
 static void
 on_offer_set (GstPromise * promise, gpointer user_data)
 {
+    auto self = static_cast<SendRecv*>(user_data);
+
   gst_promise_unref (promise);
-  promise = gst_promise_new_with_change_func (on_answer_created, nullptr, nullptr);
-  g_signal_emit_by_name (webrtc1, "create-answer", NULL, promise);
+  promise = gst_promise_new_with_change_func (on_answer_created, self, nullptr);
+  g_signal_emit_by_name (self->webrtc1, "create-answer", NULL, promise);
 }
 
-static void
-on_offer_received (GstSDPMessage * sdp)
+void on_offer_received (GstSDPMessage * sdp)
 {
   GstWebRTCSessionDescription *offer = nullptr;
   GstPromise *promise;
@@ -1240,7 +1297,7 @@ on_offer_received (GstSDPMessage * sdp)
 
   /* Set remote description on our pipeline */
   {
-    promise = gst_promise_new_with_change_func (on_offer_set, nullptr, nullptr);
+    promise = gst_promise_new_with_change_func (on_offer_set, this, nullptr);
     g_signal_emit_by_name (webrtc1, "set-remote-description", offer, promise);
   }
   gst_webrtc_session_description_free (offer);
@@ -1374,62 +1431,40 @@ void on_server_message(const gchar *text) {
 
 
 
-static gboolean
-check_plugins ()
-{
-  gboolean ret;
-  GstPlugin *plugin;
-  GstRegistry *registry;
-  const gchar *needed[] = { "opus", "vpx", "nice", "webrtc", "dtls", "srtp",
-    "rtpmanager", "videotestsrc", "audiotestsrc", nullptr
-  };
-
-  registry = gst_registry_get ();
-  ret = TRUE;
-  for (guint i = 0; i < g_strv_length ((gchar **) needed); i++) {
-    plugin = gst_registry_find_plugin (registry, needed[i]);
-    if (!plugin) {
-      gst_print ("Required gstreamer plugin '%s' not found\n", needed[i]);
-      ret = FALSE;
-      continue;
-    }
-    gst_object_unref (plugin);
-  }
-  return ret;
-}
 
 //GMainLoop *gloop = 0;
-GThread *gthread = nullptr;
 
-static gpointer glibMainLoopThreadFunc(gpointer /*unused*/)
+static gpointer glibMainLoopThreadFunc(gpointer data)
 {
-    signaling_connection = get_signaling_connection();
+    auto self = static_cast<SendRecv *>(data);
 
-    loop = g_main_loop_new(nullptr, false);
+    self->signaling_connection = get_signaling_connection();
 
-    signaling_connection->connect_to_server_async();
+    self->loop = g_main_loop_new(nullptr, false);
 
-    g_main_loop_run(loop);
+    self->signaling_connection->connect_to_server_async();
+
+    g_main_loop_run(self->loop);
     //g_main_loop_unref(loop);
-    if (loop)
-        g_clear_pointer(&loop, g_main_loop_unref);
-    loop = nullptr;
+    if (self->loop)
+        g_clear_pointer(&self->loop, g_main_loop_unref);
+    self->loop = nullptr;
 
-    if (webrtcbin_get_stats_id)
-        g_source_remove(webrtcbin_get_stats_id);
-    webrtcbin_get_stats_id = 0;
+    if (self->webrtcbin_get_stats_id)
+        g_source_remove(self->webrtcbin_get_stats_id);
+    self->webrtcbin_get_stats_id = 0;
 
-    if (pipe1) {
-      gst_element_set_state (GST_ELEMENT (pipe1), GST_STATE_NULL);
+    if (self->pipe1) {
+      gst_element_set_state (GST_ELEMENT (self->pipe1), GST_STATE_NULL);
       gst_print ("Pipeline stopped\n");
-      gst_object_unref (pipe1);
-      pipe1 = nullptr;
+      gst_object_unref (self->pipe1);
+      self->pipe1 = nullptr;
     }
-    webrtc1 = nullptr;
+    self->webrtc1 = nullptr;
 
-    signaling_connection.reset();
+    self->signaling_connection.reset();
 
-    ice_candidates.clear();
+    self->ice_candidates.clear();
 
     return nullptr;
 }
@@ -1449,8 +1484,39 @@ bool start_sendrecv(unsigned long long winid, QSlider* volume_notifier, ISendRec
 
         app_state = APP_STATE_UNKNOWN;
 
-        gthread = g_thread_new(nullptr, glibMainLoopThreadFunc, nullptr);
+        gthread = g_thread_new(nullptr, glibMainLoopThreadFunc, this);
     }
 
     return true;
+}
+
+}; // class SendRecv
+
+
+static SendRecv sendrecv;
+
+void cleanup_and_quit_loop(const gchar* msg, bool is_error)
+{
+    sendrecv.cleanup_and_quit_loop(msg, is_error);
+}
+
+bool set_connected()
+{
+    return sendrecv.set_connected();
+}
+
+void on_server_message(const gchar* text)
+{
+    sendrecv.on_server_message(text);
+}
+
+gboolean start_pipeline(gboolean create_offer)
+{
+    return sendrecv.start_pipeline(create_offer);
+}
+
+
+bool start_sendrecv(unsigned long long winid, QSlider* volume_notifier, ISendRecv* isendrecv)
+{
+    return sendrecv.start_sendrecv(winid, volume_notifier, isendrecv);
 }
