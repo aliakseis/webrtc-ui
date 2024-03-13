@@ -1129,8 +1129,7 @@ start_pipeline (gboolean create_offer)
       }
   }
 
-  pipe1 =
-      gst_parse_launch (("webrtcbin bundle-policy=max-bundle name=sendrecv "
+  const auto pipeline_description = "webrtcbin bundle-policy=max-bundle name=sendrecv "
       STUN_SERVER + turnServer
       + QSettings().value(SETTING_VIDEO_LAUNCH_LINE, VIDEO_LAUNCH_LINE_DEFAULT).toString().toStdString() +
       " ! videoconvert ! queue ! "
@@ -1141,7 +1140,9 @@ start_pipeline (gboolean create_offer)
       "queue ! " RTP_CAPS_VP8 "96 ! sendrecv. "
       + QSettings().value(SETTING_AUDIO_LAUNCH_LINE, AUDIO_LAUNCH_LINE_DEFAULT).toString().toStdString() +
       " ! audioconvert ! audioresample ! queue ! opusenc ! rtpopuspay name=audiopay ! "
-      "queue ! " RTP_CAPS_OPUS "97 ! sendrecv. ").c_str(), &error);
+      "queue ! " RTP_CAPS_OPUS "97 ! sendrecv. ";
+
+  pipe1 = gst_parse_launch (pipeline_description.c_str(), &error);
 
   if (error) {
     gst_printerr ("Failed to parse launch: %s\n", error->message);
