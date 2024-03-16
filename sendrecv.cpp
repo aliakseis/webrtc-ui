@@ -51,15 +51,11 @@ GST_DEBUG_CATEGORY_STATIC (GST_CAT_DEFAULT);
 static gchar*
 get_string_from_json_object(JsonObject* object)
 {
-    JsonNode* root;
-    JsonGenerator* generator;
-    gchar* text;
-
     /* Make it the root node */
-    root = json_node_init_object(json_node_alloc(), object);
-    generator = json_generator_new();
+    auto root = json_node_init_object(json_node_alloc(), object);
+    auto generator = json_generator_new();
     json_generator_set_root(generator, root);
-    text = json_generator_to_data(generator, nullptr);
+    auto text = json_generator_to_data(generator, nullptr);
 
     /* Release everything */
     g_object_unref(generator);
@@ -81,11 +77,10 @@ get_string_from_json_object(JsonObject* object)
 static GstElement*
 find_video_sink()
 {
-    GstStateChangeReturn sret;
     GstElement* sink;
 
     if ((sink = gst_element_factory_make("xvimagesink", nullptr))) {
-        sret = gst_element_set_state(sink, GST_STATE_READY);
+        auto sret = gst_element_set_state(sink, GST_STATE_READY);
         if (sret == GST_STATE_CHANGE_SUCCESS)
             return sink;
 
@@ -94,7 +89,7 @@ find_video_sink()
     }
 
     if ((sink = gst_element_factory_make("ximagesink", nullptr))) {
-        sret = gst_element_set_state(sink, GST_STATE_READY);
+        auto sret = gst_element_set_state(sink, GST_STATE_READY);
         if (sret == GST_STATE_CHANGE_SUCCESS)
             return sink;
 
@@ -112,7 +107,7 @@ find_video_sink()
             return nullptr;
         }
 
-        sret = gst_element_set_state(sink, GST_STATE_READY);
+        auto sret = gst_element_set_state(sink, GST_STATE_READY);
         if (sret == GST_STATE_CHANGE_SUCCESS)
             return sink;
 
@@ -132,26 +127,6 @@ static_rtp_packet_loss_probe(GstPad* opad, GstPadProbeInfo* p_info, gpointer /*p
     GstEvent* event = gst_pad_probe_info_get_event(p_info);
     switch (GST_EVENT_TYPE(event))
     {
-        //case GST_EVENT_CUSTOM_DOWNSTREAM:
-        //{
-        //    // rtpjitterbuffer (which is inside the rtpbin
-        //    // that is inside rtspsrc) generates this event.
-        //    // So far, there is no dedicated packet loss event
-        //    // type, and custom downstream events are used instead.
-        //    if (gst_event_has_name(event, "GstRTPPacketLost"))
-        //    {
-        //        GstStructure const *s = gst_event_get_structure(event);
-        //        guint num_packets = 1;
-
-        //        if (gst_structure_has_field(s, "num-packets"))
-        //            gst_structure_get_uint(s, "num-packets", &num_packets);
-
-        //        gst_print("detected %d lost or too-late packet(s)", num_packets);
-        //    }
-
-        //    break;
-        //}
-
     case GST_EVENT_GAP:
     {
         static GstClockTime prev_ts{};
@@ -219,7 +194,8 @@ private:
 };
 
 
-static auto prepare_next_file_name() {
+static auto prepare_next_file_name()
+{
     QDateTime now = QDateTime::currentDateTime();
     const auto name = now.toString("yyMMddhhmmss");
     auto path = QSettings().value(SETTING_SAVE_PATH).toString() + '/' + name + ".webm";
@@ -229,14 +205,14 @@ static auto prepare_next_file_name() {
         ++i;
         path = QSettings().value(SETTING_SAVE_PATH).toString() + '/' + name + '(' + QString::number(i) + ").webm";
     }
-    return QFile::encodeName(path);// .constData();
+    return QFile::encodeName(path);
 }
 
 static gchar* splitmuxsink_on_format_location_full(GstElement* splitmux,
     guint fragment_id,
     GstSample* first_sample,
-    gpointer user_data) {
-    //g_print("Requesting new file path for device recording \n");
+    gpointer user_data)
+{
     auto nextfilename = prepare_next_file_name();
     g_print("New file name generated for recording as %s \n", nextfilename.constData());
     return g_strdup_printf("%s", nextfilename.constData());
@@ -245,17 +221,14 @@ static gchar* splitmuxsink_on_format_location_full(GstElement* splitmux,
 static gboolean
 check_plugins()
 {
-    gboolean ret;
-    GstPlugin* plugin;
-    GstRegistry* registry;
     const gchar* needed[] = { "opus", "vpx", "nice", "webrtc", "dtls", "srtp",
       "rtpmanager", "videotestsrc", "audiotestsrc", nullptr
     };
 
-    registry = gst_registry_get();
-    ret = TRUE;
+    auto registry = gst_registry_get();
+    gboolean ret = TRUE;
     for (guint i = 0; i < g_strv_length((gchar**)needed); i++) {
-        plugin = gst_registry_find_plugin(registry, needed[i]);
+        auto plugin = gst_registry_find_plugin(registry, needed[i]);
         if (!plugin) {
             gst_print("Required gstreamer plugin '%s' not found\n", needed[i]);
             ret = FALSE;
@@ -373,16 +346,12 @@ void cleanup_and_quit_loop(const gchar* msg, bool is_error)
 }
 
 void handle_media_stream(GstPad* pad, GstElement* pipe, const char* convert_name,
-    //const char *sink_name)
     GstElement* sink)
 {
-    //gst_println ("Trying to handle stream with %s ! %s", convert_name, sink_name);
-
     auto q = gst_element_factory_make("queue", nullptr);
     g_assert_nonnull(q);
     auto conv = gst_element_factory_make(convert_name, nullptr);
     g_assert_nonnull(conv);
-    //sink = gst_element_factory_make (sink_name, nullptr);
     g_assert_nonnull(sink);
 
     if (g_strcmp0(convert_name, "audioconvert") == 0) {
@@ -451,7 +420,7 @@ on_incoming_decodebin_stream (GstElement * decodebin, GstPad * pad,
 
   if (g_str_has_prefix (name, "video")) {
     auto sink = find_video_sink();
-    self->handle_media_stream (pad, self->pipe1, "videoconvert", sink);//"autovideosink");
+    self->handle_media_stream (pad, self->pipe1, "videoconvert", sink);
     gst_video_overlay_set_window_handle (GST_VIDEO_OVERLAY (sink), self->xwinid);
   } else if (g_str_has_prefix (name, "audio")) {
       self->handle_media_stream (pad, self->pipe1, "audioconvert", gst_element_factory_make("autoaudiosink", nullptr));
@@ -478,14 +447,11 @@ GstElement* get_file_sink(GstBin* pipe)
         auto s = gst_structure_new("properties",
             "streamable", G_TYPE_BOOLEAN, TRUE,
             nullptr);
-        //auto muxer = gst_element_factory_make("webmmux", nullptr);
         g_object_set(G_OBJECT(splitmuxsink),
-            //"location", "d:/videos/video%05d.webm",
             "async-finalize", TRUE,
-            "max-size-time", GST_SECOND * sliceDurationSecs,  //(guint64)10000000000,
+            "max-size-time", GST_SECOND * sliceDurationSecs,
             "muxer-factory", muxerName,
             "muxer-properties", s,
-            //"muxer", muxer,
             NULL);
         g_signal_connect(splitmuxsink, "format-location-full",
             G_CALLBACK(splitmuxsink_on_format_location_full), NULL);
@@ -519,8 +485,6 @@ GstElement* get_file_sink(GstBin* pipe)
     g_assert_true(ok);
 
     ok = gst_element_link_many(
-        //tee,
-        //rtpvp8depay,
         muxer,
         filesink,
         NULL);
@@ -544,7 +508,6 @@ gst_pad_probe_callback(GstPad * pad,
     if (pts <= self->last_video_pts)
     {
         g_print("Out-of-order pts: %lld; the last pts: %lld.\n", pts, self->last_video_pts);
-        //return GST_PAD_PROBE_DROP;
         buffer->pts = self->last_video_pts;
         return GST_PAD_PROBE_OK;
     }
@@ -553,32 +516,6 @@ gst_pad_probe_callback(GstPad * pad,
     return GST_PAD_PROBE_OK;
 }
 
-
-/*
-static GstClockTime last_audio_pts{};
-
-// https://stackoverflow.com/questions/29107370/gstreamer-timestamps-pts-are-not-monotonically-increasing-for-captured-frames
-static GstPadProbeReturn
-gst_pad_audio_probe_callback(GstPad * pad,
-    GstPadProbeInfo * info,
-    gpointer user_data)
-{
-
-    auto buffer = gst_pad_probe_info_get_buffer(info);
-
-    auto pts = buffer->pts;
-    if (pts <= last_audio_pts)
-    {
-        g_print("Out-of-order AUDIO pts: %lld; the last pts: %lld.\n", pts, last_audio_pts);
-        //return GST_PAD_PROBE_DROP;
-        buffer->pts = last_audio_pts;
-        return GST_PAD_PROBE_OK;
-    }
-    last_audio_pts = pts;
-
-    return GST_PAD_PROBE_OK;
-}
-*/
 
 static void
 on_incoming_stream (GstElement * webrtc, GstPad * pad, gpointer user_data)
@@ -608,7 +545,7 @@ on_incoming_stream (GstElement * webrtc, GstPad * pad, gpointer user_data)
   }
   if (payload == 96 || payload == 97)
   {
-      auto tee = gst_element_factory_make("tee", nullptr);// "tee");
+      auto tee = gst_element_factory_make("tee", nullptr);
       gst_bin_add(GST_BIN(self->pipe1), tee);
       gst_element_sync_state_with_parent(tee);
 
@@ -628,8 +565,7 @@ on_incoming_stream (GstElement * webrtc, GstPad * pad, gpointer user_data)
       }
 
       auto rtpvp8depay = gst_element_factory_make(
-          (payload == 96) ? "rtpvp8depay" : "rtpopusdepay",
-          nullptr);// "rtpvp8depay");
+          (payload == 96) ? "rtpvp8depay" : "rtpopusdepay", nullptr);
 
       auto ok = gst_bin_add(GST_BIN(self->pipe1), rtpvp8depay);
       g_assert_true(ok);
@@ -651,14 +587,6 @@ on_incoming_stream (GstElement * webrtc, GstPad * pad, gpointer user_data)
       {
         self->last_video_pts = {};
 
-        //auto identity = gst_element_factory_make("identity", nullptr);
-
-        //auto ok = gst_bin_add(GST_BIN(pipe1), identity);
-        //g_assert_true(ok);
-
-        //ok = gst_element_sync_state_with_parent(identity);
-        //g_assert_true(ok);
-
         auto srcpad = gst_element_get_static_pad(rtpvp8depay, "src");
         gst_pad_add_probe(srcpad, GST_PAD_PROBE_TYPE_BUFFER, gst_pad_probe_callback, self, nullptr);
 
@@ -672,11 +600,6 @@ on_incoming_stream (GstElement * webrtc, GstPad * pad, gpointer user_data)
       }
       else
       {
-          //last_audio_pts = {};
-          //auto srcpad = gst_element_get_static_pad(rtpvp8depay, "src");
-          //gst_pad_add_probe(srcpad, GST_PAD_PROBE_TYPE_BUFFER, gst_pad_audio_probe_callback, nullptr, nullptr);
-
-          //*
           auto opusdec = gst_element_factory_make("opusdec", nullptr);
           ok = gst_bin_add(GST_BIN(self->pipe1), opusdec);
           g_assert_true(ok);
@@ -696,16 +619,13 @@ on_incoming_stream (GstElement * webrtc, GstPad * pad, gpointer user_data)
           g_assert_true(ok);
           ok = gst_element_sync_state_with_parent(opusenc);
           g_assert_true(ok);
-          //*/
 
           ok = gst_element_link_many(tee,
-              //rtpjitterbuffer,
               rtpvp8depay,
               opusdec,
               audiorate,
               opusenc,
               queue,
-              //sink,
               NULL);
           g_assert_true(ok);
       }
@@ -727,28 +647,6 @@ on_incoming_stream (GstElement * webrtc, GstPad * pad, gpointer user_data)
   }
 }
 
-#if 0
-static void
-send_ice_candidate_message (GstElement * webrtc G_GNUC_UNUSED, guint mlineindex,
-    gchar * candidate, gpointer user_data G_GNUC_UNUSED)
-{
-  if (app_state < PEER_CALL_NEGOTIATING) {
-    cleanup_and_quit_loop ("Can't send ICE, not in call", APP_STATE_ERROR);
-    return;
-  }
-
-  auto ice = json_object_new ();
-  json_object_set_string_member (ice, "candidate", candidate);
-  json_object_set_int_member (ice, "sdpMLineIndex", mlineindex);
-  auto msg = json_object_new ();
-  json_object_set_object_member (msg, "ice", ice);
-  auto text = get_string_from_json_object (msg);
-  json_object_unref (msg);
-
-  signaling_connection->send_text(text);
-  g_free (text);
-}
-#endif
 
 static void
 send_ice_candidate_message(GstElement * webrtc G_GNUC_UNUSED, guint mlineindex,
@@ -845,7 +743,6 @@ on_offer_created (GstPromise * promise, gpointer user_data)
 
 void on_negotiation_needed (GstElement * element, bool create_offer)
 {
-  //gboolean create_offer = GPOINTER_TO_INT (user_data);
   app_state = PEER_CALL_NEGOTIATING;
 
   if (remote_is_offerer) {
@@ -882,17 +779,6 @@ data_channel_on_error (GObject * dc, gpointer user_data)
     self->cleanup_and_quit_loop ("Data channel error", APP_STATE_UNKNOWN);
 }
 
-/*
-static void
-data_channel_on_open (GObject * dc, gpointer user_data)
-{
-  GBytes *bytes = g_bytes_new ("data", strlen ("data"));
-  gst_print ("data channel opened\n");
-  g_signal_emit_by_name (dc, "send-string", "Hi! from GStreamer");
-  g_signal_emit_by_name (dc, "send-data", bytes);
-  g_bytes_unref (bytes);
-}
-*/
 
 static void
 data_channel_on_close (GObject * dc, gpointer user_data)
@@ -906,7 +792,6 @@ data_channel_on_message_string (GObject * dc, gchar * str, gpointer user_data)
 {
     auto self = static_cast<SendRecv*>(user_data);
 
-  //gst_print ("Received data channel message: %s\n", str);
     if (self->p_sendrecv)
         self->p_sendrecv->handleRecv((uintptr_t)(void*) dc, str);
 }
@@ -915,7 +800,6 @@ void connect_data_channel_signals (GObject * data_channel)
 {
   g_signal_connect (data_channel, "on-error",
       G_CALLBACK (data_channel_on_error), this);
-  //g_signal_connect (data_channel, "on-open", G_CALLBACK (data_channel_on_open), NULL);
   g_signal_connect (data_channel, "on-close",
       G_CALLBACK (data_channel_on_close), this);
   g_signal_connect (data_channel, "on-message-string",
@@ -1002,7 +886,6 @@ on_ice_connection_state_notify(GstElement * webrtcbin, GParamSpec * pspec,
     gst_print("ICE connection state changed to %s\n", new_state);
 }
 
-//static gboolean webrtcbin_get_stats (GstElement * webrtcbin);
 
 static gboolean
 on_webrtcbin_stat (GQuark field_id, const GValue * value, gpointer unused)
@@ -1079,20 +962,8 @@ static gboolean bus_call(GstBus * /*bus*/, GstMessage *msg, void *user_data)
             // could get and handle source: GST_MESSAGE_SRC(msg);
         }
 
-    //    if (context->loop)
-    //        g_main_loop_quit(context->loop);
-
-    //    return FALSE;
         break;
     }
-
-    //case GST_MESSAGE_EOS:
-    //{
-    //    g_message("End-of-stream");
-    //    if (context->loop)
-    //        g_main_loop_quit(context->loop);
-    //    break;
-    //}
 
     case GST_MESSAGE_LATENCY:
     {
@@ -1198,12 +1069,6 @@ start_pipeline (gboolean create_offer)
   g_signal_connect(webrtc1, "notify::ice-connection-state",
       G_CALLBACK(on_ice_connection_state_notify), NULL);
 
-  /*
-  auto rtpbin = gst_bin_get_by_name(GST_BIN(webrtc1), "rtpbin");
-  g_object_set(rtpbin, "latency", 1000, NULL);
-  g_object_unref(rtpbin);
-  */
-
   gst_element_set_state (pipe1, GST_STATE_READY);
 
   g_signal_emit_by_name (webrtc1, "create-data-channel", "channel", NULL,
@@ -1258,12 +1123,11 @@ on_answer_created (GstPromise * promise, gpointer user_data)
     auto self = static_cast<SendRecv*>(user_data);
 
   GstWebRTCSessionDescription *answer = nullptr;
-  const GstStructure *reply;
 
   g_assert_cmphex (self->app_state, ==, PEER_CALL_NEGOTIATING);
 
   g_assert_cmphex (gst_promise_wait (promise), ==, GST_PROMISE_RESULT_REPLIED);
-  reply = gst_promise_get_reply (promise);
+  auto reply = gst_promise_get_reply (promise);
   gst_structure_get (reply, "answer",
       GST_TYPE_WEBRTC_SESSION_DESCRIPTION, &answer, NULL);
   gst_promise_unref (promise);
@@ -1431,10 +1295,6 @@ void on_server_message(const gchar *text) {
 }
 
 
-
-
-//GMainLoop *gloop = 0;
-
 static gpointer glibMainLoopThreadFunc(gpointer data)
 {
     auto self = static_cast<SendRecv *>(data);
@@ -1446,7 +1306,6 @@ static gpointer glibMainLoopThreadFunc(gpointer data)
     self->signaling_connection->connect_to_server_async();
 
     g_main_loop_run(self->loop);
-    //g_main_loop_unref(loop);
     if (self->loop)
         g_clear_pointer(&self->loop, g_main_loop_unref);
     self->loop = nullptr;
