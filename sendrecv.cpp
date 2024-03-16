@@ -591,10 +591,8 @@ on_incoming_stream (GstElement * webrtc, GstPad * pad, gpointer user_data)
         gst_pad_add_probe(srcpad, GST_PAD_PROBE_TYPE_BUFFER, gst_pad_probe_callback, self, nullptr);
 
         ok = gst_element_link_many(tee,
-            //rtpjitterbuffer,
             rtpvp8depay,
             queue,
-            //sink,
             NULL);
         g_assert_true(ok);
       }
@@ -721,12 +719,11 @@ on_offer_created (GstPromise * promise, gpointer user_data)
     auto self = static_cast<SendRecv*>(user_data);
 
   GstWebRTCSessionDescription *offer = nullptr;
-  const GstStructure *reply;
 
   g_assert_cmphex (self->app_state, ==, PEER_CALL_NEGOTIATING);
 
   g_assert_cmphex (gst_promise_wait (promise), ==, GST_PROMISE_RESULT_REPLIED);
-  reply = gst_promise_get_reply (promise);
+  auto reply = gst_promise_get_reply (promise);
   gst_structure_get (reply, "offer",
       GST_TYPE_WEBRTC_SESSION_DESCRIPTION, &offer, NULL);
   gst_promise_unref (promise);
@@ -906,11 +903,9 @@ on_webrtcbin_get_stats (GstPromise * promise, void* user_data)
 {
     auto self = static_cast<SendRecv*>(user_data);
 
-  const GstStructure *stats;
-
   g_return_if_fail (gst_promise_wait (promise) == GST_PROMISE_RESULT_REPLIED);
 
-  stats = gst_promise_get_reply (promise);
+  auto stats = gst_promise_get_reply (promise);
   gst_structure_foreach (stats, on_webrtcbin_stat, nullptr);
 
   self->webrtcbin_get_stats_id = g_timeout_add (100, (GSourceFunc) webrtcbin_get_stats, self);
@@ -1154,10 +1149,9 @@ on_offer_set (GstPromise * promise, gpointer user_data)
 
 void on_offer_received (GstSDPMessage * sdp)
 {
-  GstWebRTCSessionDescription *offer = nullptr;
   GstPromise *promise;
 
-  offer = gst_webrtc_session_description_new (GST_WEBRTC_SDP_TYPE_OFFER, sdp);
+  auto offer = gst_webrtc_session_description_new (GST_WEBRTC_SDP_TYPE_OFFER, sdp);
   g_assert_nonnull (offer);
 
   /* Set remote description on our pipeline */
