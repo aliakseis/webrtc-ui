@@ -5,9 +5,13 @@
 #include "preferences.h"
 
 #include "sendrecv.h"
+#include "version.h"
 
 #include <QMessageBox>
 #include <QSlider>
+
+#define STRINGIZE_(str) #str
+#define STRINGIZE(x) STRINGIZE_(x)
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -74,7 +78,8 @@ void MainWindow::onHelp()
     QMessageBox::about(
         this,
         tr("About webrtc-ui"),
-        '\n' + QApplication::organizationDomain() + '/' + QApplication::organizationName() + '/' + QApplication::applicationName());
+        "\nVersion " STRINGIZE(GIT_COMMIT) "\n" + 
+        QApplication::organizationDomain() + '/' + QApplication::organizationName() + '/' + QApplication::applicationName());
 
 }
 

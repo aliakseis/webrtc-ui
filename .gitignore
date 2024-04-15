@@ -61,3 +61,5 @@ build64/
 CMakePresets.json
 CMakeUserPresets.json
 CMakeSettings.json
+
+version.h

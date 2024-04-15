@@ -122,6 +122,13 @@ target_include_directories(webrtc-ui PUBLIC ${GSTREAMER_INCLUDE_DIRS})
 
 target_link_libraries(webrtc-ui PRIVATE Qt${QT_VERSION_MAJOR}::Widgets ${GSTREAMER_LIBRARIES} crossguid CURL::libcurl)
 
+# Add a custom target to run the shell script before building the project
+add_custom_target(update_version_file
+    COMMAND ${CMAKE_SOURCE_DIR}/update_version.sh
+)
+
+# Add dependencies for the custom target so that the script runs before building
+add_dependencies(webrtc-ui update_version_file)
 
 
 if(MSVC)
