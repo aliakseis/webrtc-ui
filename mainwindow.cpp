@@ -59,7 +59,7 @@ MainWindow::~MainWindow()
 
 void MainWindow::onRingingCall()
 {
-    start_sendrecv(ui->videoArea->winId(), m_volume, this);
+    start_sendrecv(ui->videoArea->winId(), this);
 }
 
 void MainWindow::onHangUp()
@@ -144,9 +144,14 @@ void MainWindow::handleRecv(uintptr_t id, const char* data)
     emit messageReceived(data);
 }
 
-void MainWindow::setSendLambda(std::function<void(const QString&)> lambda)
+QMetaObject::Connection MainWindow::setAudioVolumeLambda(std::function<void(int)> lambda)
 {
-    connect(this, &MainWindow::messageSent, lambda);
+    return connect(m_volume, &QSlider::valueChanged, lambda);
+}
+
+QMetaObject::Connection MainWindow::setSendLambda(std::function<void(const QString&)> lambda)
+{
+    return connect(this, &MainWindow::messageSent, lambda);
 }
 
 void MainWindow::onQuit()

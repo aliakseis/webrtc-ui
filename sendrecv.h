@@ -9,8 +9,7 @@ bool set_connected();
 void on_server_message(const gchar *text);
 gboolean start_pipeline(gboolean create_offer);
 
-class QSlider;
 struct ISendRecv;
 
-bool start_sendrecv(unsigned long long winid, QSlider* volume_notifier, ISendRecv* sendrecv);
+bool start_sendrecv(unsigned long long winid, ISendRecv* sendrecv);
 

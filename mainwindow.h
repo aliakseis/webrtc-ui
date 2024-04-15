@@ -21,12 +21,12 @@ public:
     MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
 
-signals:
+Q_SIGNALS:
     // A signal that is emitted when a message is sent to another user
     void messageSent(const QString& message);
     void messageReceived(const QString& message);
 
-private slots:
+private Q_SLOTS:
     void onRingingCall();
     void onHangUp();
     void onHelp();
@@ -58,7 +58,8 @@ private:
 
     // Inherited via ISendRecv
     void handleRecv(uintptr_t id, const char* data) override;
-    void setSendLambda(std::function<void(const QString&)> lambda) override;
+    QMetaObject::Connection setAudioVolumeLambda(std::function<void(int)> lambda) override;
+    QMetaObject::Connection setSendLambda(std::function<void(const QString&)> lambda) override;
     void onQuit() override;
 };
 #endif // MAINWINDOW_H

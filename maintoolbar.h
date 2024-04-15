@@ -18,13 +18,13 @@ public:
     explicit MainToolBar(QWidget* parent = 0);
     ~MainToolBar();
 
-signals:
+Q_SIGNALS:
     void ringingCall();
     void hangUp();
     void help();
     void settings();
 
-private slots:
+private Q_SLOTS:
     void on_btnRingingCall_clicked();
     void on_btnHangUp_clicked();
     void on_btnHelp_clicked();

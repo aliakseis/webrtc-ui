@@ -172,12 +172,7 @@ public:
     }
     ~GObjHandle()
     {
-        if (m_valid)
-            g_weak_ref_clear(&m_ref);
-    }
-    GObjHandle(GObjHandle&& other)  noexcept : m_ref(other.m_ref)
-    {
-        other.m_valid = false;
+        g_weak_ref_clear(&m_ref);
     }
     GObjHandle(const GObjHandle&) = delete;
     GObjHandle operator =(const GObjHandle&) = delete;
@@ -190,7 +185,6 @@ public:
 
 private:
     mutable GWeakRef m_ref;
-    bool m_valid = true;
 };
 
 
@@ -272,8 +266,8 @@ class SendRecv {
 GMainLoop *loop = nullptr;
 GstElement *pipe1 = nullptr;
 GstElement *webrtc1 = nullptr;
-GObject *send_channel = nullptr;
-GObject *receive_channel = nullptr;
+//GObject *send_channel = nullptr;
+//GObject *receive_channel = nullptr;
 
 AppState app_state = APP_STATE_UNKNOWN;
 
@@ -283,7 +277,7 @@ std::vector<std::pair<int, std::string>> ice_candidates;
 
 guintptr xwinid{};
 
-QSlider* g_volume_notifier = nullptr;
+//QSlider* g_volume_notifier = nullptr;
 
 ISendRecv* p_sendrecv = nullptr;
 
@@ -361,12 +355,12 @@ void handle_media_stream(GstPad* pad, GstElement* pipe, const char* convert_name
         g_assert_nonnull(resample);
 
         auto volume = gst_element_factory_make("volume", nullptr);
-        auto c = new QMetaObject::Connection(
-            QObject::connect(g_volume_notifier, &QSlider::valueChanged, [ptr = GObjHandle(volume)](int v) {
-                if (auto obj = ptr.get())
-                    g_object_set(obj.get(), "volume", v / 100., NULL);
-                })
-        );
+        auto lam = [ptr = std::make_shared<GObjHandle>(volume)](int v) {
+            if (auto obj = ptr->get())
+                g_object_set(obj.get(), "volume", v / 100., NULL);
+            };
+        auto c = new QMetaObject::Connection(p_sendrecv->setAudioVolumeLambda(std::move(lam)));
+
         g_object_weak_ref(G_OBJECT(volume), disconnect, c);
 
         gst_bin_add_many(GST_BIN(pipe), q, conv, resample, volume, sink, NULL);
@@ -810,18 +804,18 @@ on_data_channel (GstElement * webrtc, GObject * data_channel,
     auto self = static_cast<SendRecv*>(user_data);
 
   self->connect_data_channel_signals (data_channel);
-  self->receive_channel = data_channel;
   if (self->p_sendrecv)
   {
-      auto lam = [self](const QString& s) {
+      auto lam = [ptr = std::make_shared<GObjHandle>(data_channel)](const QString& s) {
           auto line = s.toStdString();
-          if (!line.empty() && self->receive_channel)
-              g_signal_emit_by_name(self->receive_channel, "send-string", line.c_str());
+          if (line.empty())
+              return;
+          if (auto obj = ptr->get())
+              g_signal_emit_by_name(obj.get(), "send-string", line.c_str());
           };
-
-      self->p_sendrecv->setSendLambda(lam);
+      auto c = new QMetaObject::Connection(self->p_sendrecv->setSendLambda(std::move(lam)));
+      g_object_weak_ref(G_OBJECT(data_channel), disconnect, c);
   }
-
 }
 
 static void
@@ -1066,6 +1060,7 @@ start_pipeline (gboolean create_offer)
 
   gst_element_set_state (pipe1, GST_STATE_READY);
 
+  GObject* send_channel = nullptr;
   g_signal_emit_by_name (webrtc1, "create-data-channel", "channel", NULL,
       &send_channel);
   if (send_channel) {
@@ -1074,13 +1069,15 @@ start_pipeline (gboolean create_offer)
 
     if (p_sendrecv)
     {
-        auto lam = [this](const QString& s) {
+        auto lam = [ptr = std::make_shared<GObjHandle>(send_channel)](const QString& s) {
             auto line = s.toStdString();
-            if (!line.empty() && send_channel)
-                g_signal_emit_by_name(send_channel, "send-string", line.c_str());
+            if (line.empty())
+                return;
+            if (auto obj = ptr->get())
+                g_signal_emit_by_name(obj.get(), "send-string", line.c_str());
         };
-
-        p_sendrecv->setSendLambda(lam);
+        auto c = new QMetaObject::Connection(p_sendrecv->setSendLambda(std::move(lam)));
+        g_object_weak_ref(G_OBJECT(send_channel), disconnect, c);
     }
 
   } else {
@@ -1324,7 +1321,7 @@ static gpointer glibMainLoopThreadFunc(gpointer data)
 }
 
 
-bool start_sendrecv(unsigned long long winid, QSlider* volume_notifier, ISendRecv* sendrecv)
+bool start_sendrecv(unsigned long long winid, ISendRecv* sendrecv)
 {
     if (loop == nullptr) {
         if (!check_plugins ())
@@ -1333,8 +1330,6 @@ bool start_sendrecv(unsigned long long winid, QSlider* volume_notifier, ISendRec
         xwinid = winid;
 
         p_sendrecv = sendrecv;
-
-        g_volume_notifier = volume_notifier;
 
         app_state = APP_STATE_UNKNOWN;
 
@@ -1370,7 +1365,7 @@ gboolean start_pipeline(gboolean create_offer)
 }
 
 
-bool start_sendrecv(unsigned long long winid, QSlider* volume_notifier, ISendRecv* isendrecv)
+bool start_sendrecv(unsigned long long winid, ISendRecv* isendrecv)
 {
-    return sendrecv.start_sendrecv(winid, volume_notifier, isendrecv);
+    return sendrecv.start_sendrecv(winid, isendrecv);
 }
