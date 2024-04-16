@@ -261,38 +261,31 @@ enum AppState
 
 const static gboolean remote_is_offerer = FALSE;
 
-class SendRecv {
-
-GMainLoop *loop = nullptr;
-GstElement *pipe1 = nullptr;
-GstElement *webrtc1 = nullptr;
-//GObject *send_channel = nullptr;
-//GObject *receive_channel = nullptr;
-
-AppState app_state = APP_STATE_UNKNOWN;
-
-guint webrtcbin_get_stats_id = 0;
-
-std::vector<std::pair<int, std::string>> ice_candidates;
-
-guintptr xwinid{};
-
-//QSlider* g_volume_notifier = nullptr;
-
-ISendRecv* p_sendrecv = nullptr;
-
-
-
-std::unique_ptr<ISignalingConnection> signaling_connection;
-
-GThread* gthread = nullptr;
-
-GstClockTime last_video_pts{};
-
-std::mutex mtx;
-
-
 ////////////////////////////////////////////////////////////////////
+
+class SendRecv
+{
+    GMainLoop *loop = nullptr;
+    GstElement *pipe1 = nullptr;
+    GstElement *webrtc1 = nullptr;
+
+    AppState app_state = APP_STATE_UNKNOWN;
+
+    guint webrtcbin_get_stats_id = 0;
+
+    std::vector<std::pair<int, std::string>> ice_candidates;
+
+    guintptr xwinid{};
+
+    ISendRecv* p_sendrecv = nullptr;
+
+    std::unique_ptr<ISignalingConnection> signaling_connection;
+
+    GThread* gthread = nullptr;
+
+    GstClockTime last_video_pts{};
+
+    std::mutex mtx;
 
 public:
 
