@@ -15,6 +15,8 @@ Uses https://ntfy.sh/ for negotiation, SSE based on https://github.com/radiospie
 - Handshake (SYN/ACK). A minimal two-step handshake before starting WebRTC exchange prevents mis-parsing of random messages and gives you a clear synchronization point.
 - Message framing. Prefixing each message with the sender’s GUID + newline ensures you can distinguish origin and validate consistency across session.
 
+You can use https://github.com/aliakseis/sendrecv for testing.
+
 Free TURN server used: https://www.expressturn.com/
 
 ![bug](https://user-images.githubusercontent.com/11851670/224350642-5d3b9b2a-86f7-472b-9911-6f3de2fc89ba.jpg)
