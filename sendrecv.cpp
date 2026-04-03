@@ -2,14 +2,8 @@
 
 #include "isendrecv.h"
 
-/*
- * Demo gstreamer app for negotiating and streaming a sendrecv webrtc stream
- * with a browser JS app.
- *
- * gcc webrtc-sendrecv.c $(pkg-config --cflags --libs gstreamer-webrtc-1.0 gstreamer-sdp-1.0 libsoup-2.4 json-glib-1.0) -o webrtc-sendrecv
- *
- * Author: Nirbheek Chauhan <nirbheek@centricular.com>
- */
+#include "signaling_connection.h"
+
 #include <gst/gst.h>
 #include <gst/sdp/sdp.h>
 #include <gst/rtp/rtp.h>
@@ -20,10 +14,7 @@
 #include <gst/video/videooverlay.h>
 
 /* For signalling */
-#include "signaling_connection.h"
-
 #include <json-glib/json-glib.h>
-
 
 #include "globals.h"
 
@@ -42,11 +33,10 @@
 #include <atomic>
 #include <memory>
 #include <mutex>
+#include <functional>
 
 #define GST_CAT_DEFAULT webrtc_sendrecv_debug
 GST_DEBUG_CATEGORY_STATIC (GST_CAT_DEFAULT);
-
-
 
 static gchar*
 get_string_from_json_object(JsonObject* object)
@@ -62,8 +52,6 @@ get_string_from_json_object(JsonObject* object)
     json_node_free(root);
     return text;
 }
-
-
 
 #ifdef _WIN64
 #define DEFAULT_VIDEOSINK "d3d11videosink"
@@ -152,15 +140,29 @@ static_rtp_packet_loss_probe(GstPad* opad, GstPadProbeInfo* p_info, gpointer /*p
     return GST_PAD_PROBE_OK;
 }
 
-
+/* GLib weak-ref notify that expects a heap-allocated std::function<void()>
+ * as user-data. The function will be invoked (unregister) and deleted.
+ *
+ * The pattern is:
+ *   auto unregister = p_sendrecv->setSendLambda(...); // returns std::function<void()>
+ *   if (unregister) {
+ *       auto heap = new std::function<void()>(std::move(unregister));
+ *       g_object_weak_ref(G_OBJECT(some_gobject), weak_disconnect_function, heap);
+ *   }
+ */
 static void
-disconnect(gpointer data,
-    GObject* where_the_object_was)
+weak_disconnect_function(gpointer data,
+    GObject* /*where_the_object_was*/)
 {
-    auto c = static_cast<QMetaObject::Connection*>(data);
-    auto ok = QObject::disconnect(*c);
-    g_assert_true(ok);
-    delete c;
+    auto fptr = static_cast<std::function<void()>*>(data);
+    if (fptr) {
+        try {
+            if (*fptr) (*fptr)();
+        } catch (...) {
+            // swallow exceptions: don't throw across C boundaries
+        }
+        delete fptr;
+    }
 }
 
 class GObjHandle
@@ -352,9 +354,16 @@ void handle_media_stream(GstPad* pad, GstElement* pipe, const char* convert_name
             if (auto obj = ptr->get())
                 g_object_set(obj.get(), "volume", v / 100., nullptr);
             };
-        auto c = new QMetaObject::Connection(p_sendrecv->setAudioVolumeLambda(std::move(lam)));
 
-        g_object_weak_ref(G_OBJECT(volume), disconnect, c);
+        // Register with ISendRecv and arrange for the returned unregister to be
+        // called when the GObject is destroyed.
+        if (p_sendrecv) {
+            std::function<void()> unregister = p_sendrecv->setAudioVolumeLambda(std::move(lam));
+            if (unregister) {
+                auto heap_unregister = new std::function<void()>(std::move(unregister));
+                g_object_weak_ref(G_OBJECT(volume), weak_disconnect_function, heap_unregister);
+            }
+        }
 
         gst_bin_add_many(GST_BIN(pipe), q, conv, resample, volume, sink, nullptr);
         gst_element_sync_state_with_parent(q);
@@ -479,7 +488,6 @@ GstElement* get_file_sink(GstBin* pipe)
 
     return muxer;
 }
-
 
 // https://stackoverflow.com/questions/29107370/gstreamer-timestamps-pts-are-not-monotonically-increasing-for-captured-frames
 static GstPadProbeReturn
@@ -799,15 +807,21 @@ on_data_channel (GstElement * webrtc, GObject * data_channel,
   self->connect_data_channel_signals (data_channel);
   if (self->p_sendrecv)
   {
-      auto lam = [ptr = std::make_shared<GObjHandle>(data_channel)](const QString& s) {
-          auto line = s.toStdString();
-          if (line.empty())
+      auto lam = [ptr = std::make_shared<GObjHandle>(data_channel)](const std::string& s) {
+          if (s.empty())
               return;
           if (auto obj = ptr->get())
-              g_signal_emit_by_name(obj.get(), "send-string", line.c_str());
+              g_signal_emit_by_name(obj.get(), "send-string", s.c_str());
           };
-      auto c = new QMetaObject::Connection(self->p_sendrecv->setSendLambda(std::move(lam)));
-      g_object_weak_ref(G_OBJECT(data_channel), disconnect, c);
+      // register with ISendRecv and arrange to call the unregister on GObject destruction
+      std::function<void()> unregister;
+      if (self->p_sendrecv) {
+          unregister = self->p_sendrecv->setSendLambda(std::move(lam));
+      }
+      if (unregister) {
+          auto heap_unregister = new std::function<void()>(std::move(unregister));
+          g_object_weak_ref(G_OBJECT(data_channel), weak_disconnect_function, heap_unregister);
+      }
   }
 }
 
@@ -1062,15 +1076,24 @@ start_pipeline (gboolean create_offer)
 
     if (p_sendrecv)
     {
-        auto lam = [ptr = std::make_shared<GObjHandle>(send_channel)](const QString& s) {
-            auto line = s.toStdString();
-            if (line.empty())
+        auto lam = [ptr = std::make_shared<GObjHandle>(send_channel)](const std::string& s) {
+            if (s.empty())
                 return;
             if (auto obj = ptr->get())
-                g_signal_emit_by_name(obj.get(), "send-string", line.c_str());
+                g_signal_emit_by_name(obj.get(), "send-string", s.c_str());
         };
-        auto c = new QMetaObject::Connection(p_sendrecv->setSendLambda(std::move(lam)));
-        g_object_weak_ref(G_OBJECT(send_channel), disconnect, c);
+
+        std::function<void()> unregister;
+        if (p_sendrecv) {
+            unregister = p_sendrecv->setSendLambda(std::move(lam));
+        }
+        if (unregister) {
+            auto heap_unregister = new std::function<void()>(std::move(unregister));
+            g_object_weak_ref(G_OBJECT(send_channel), weak_disconnect_function, heap_unregister);
+        }
+
+    } else {
+        gst_print ("Could not create data channel, is usrsctp available?\n");
     }
 
   } else {

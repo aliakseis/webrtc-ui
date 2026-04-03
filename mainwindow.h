@@ -58,8 +58,8 @@ private:
 
     // Inherited via ISendRecv
     void handleRecv(uintptr_t id, const char* data) override;
-    QMetaObject::Connection setAudioVolumeLambda(std::function<void(int)> lambda) override;
-    QMetaObject::Connection setSendLambda(std::function<void(const QString&)> lambda) override;
+    std::function<void()> setAudioVolumeLambda(std::function<void(int)> lambda) override;
+    std::function<void()> setSendLambda(std::function<void(const std::string&)> lambda) override;
     void onQuit() override;
 };
 #endif // MAINWINDOW_H

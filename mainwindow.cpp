@@ -149,19 +149,34 @@ void MainWindow::handleRecv(uintptr_t id, const char* data)
     emit messageReceived(data);
 }
 
-QMetaObject::Connection MainWindow::setAudioVolumeLambda(std::function<void(int)> lambda)
-{
-    return connect(m_volume, &QSlider::valueChanged, lambda);
-}
-
-QMetaObject::Connection MainWindow::setSendLambda(std::function<void(const QString&)> lambda)
-{
-    return connect(this, &MainWindow::messageSent, lambda);
-}
 
 void MainWindow::onQuit()
 {
     disconnect(this, &MainWindow::messageSent, nullptr, nullptr);
     m_channelId = 0;
     // TODO: hang up
+}
+
+// Disable warning about lambda capture of 'this' in a destructor, which is safe here because the lambda is only used to disconnect signals, and the destructor will disconnect all signals anyway.
+#pragma warning(disable: 4573)
+
+std::function<void()> MainWindow::setAudioVolumeLambda(std::function<void(int)> lambda)
+{
+    auto c = connect(m_volume, &QSlider::valueChanged, lambda);
+    return [c] {
+        QObject::disconnect(c);
+    };
+}
+
+std::function<void()> MainWindow::setSendLambda(std::function<void(const std::string&)> lambda)
+{
+    // Bridge: convert QString -> std::string and forward to the provided handler.
+    auto bridge = [lambda = std::move(lambda)](const QString& s) {
+        lambda(s.toStdString());
+    };
+
+    auto c = connect(this, &MainWindow::messageSent, bridge);
+    return [c] {
+        QObject::disconnect(c);
+    };
 }
