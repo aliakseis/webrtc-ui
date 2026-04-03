@@ -350,19 +350,19 @@ void handle_media_stream(GstPad* pad, GstElement* pipe, const char* convert_name
         auto volume = gst_element_factory_make("volume", nullptr);
         auto lam = [ptr = std::make_shared<GObjHandle>(volume)](int v) {
             if (auto obj = ptr->get())
-                g_object_set(obj.get(), "volume", v / 100., NULL);
+                g_object_set(obj.get(), "volume", v / 100., nullptr);
             };
         auto c = new QMetaObject::Connection(p_sendrecv->setAudioVolumeLambda(std::move(lam)));
 
         g_object_weak_ref(G_OBJECT(volume), disconnect, c);
 
-        gst_bin_add_many(GST_BIN(pipe), q, conv, resample, volume, sink, NULL);
+        gst_bin_add_many(GST_BIN(pipe), q, conv, resample, volume, sink, nullptr);
         gst_element_sync_state_with_parent(q);
         gst_element_sync_state_with_parent(conv);
         gst_element_sync_state_with_parent(resample);
         gst_element_sync_state_with_parent(volume);
         gst_element_sync_state_with_parent(sink);
-        gst_element_link_many(q, conv, resample, volume, sink, NULL);
+        gst_element_link_many(q, conv, resample, volume, sink, nullptr);
     }
     else {
         // adding a probe for handling loss messages from rtpbin
@@ -372,11 +372,11 @@ void handle_media_stream(GstPad* pad, GstElement* pipe, const char* convert_name
             nullptr,
             nullptr);
 
-        gst_bin_add_many(GST_BIN(pipe), q, conv, sink, NULL);
+        gst_bin_add_many(GST_BIN(pipe), q, conv, sink, nullptr);
         gst_element_sync_state_with_parent(q);
         gst_element_sync_state_with_parent(conv);
         gst_element_sync_state_with_parent(sink);
-        gst_element_link_many(q, conv, sink, NULL);
+        gst_element_link_many(q, conv, sink, nullptr);
     }
 
     auto qpad = gst_element_get_static_pad(q, "sink");
@@ -439,7 +439,7 @@ GstElement* get_file_sink(GstBin* pipe)
             "max-size-time", GST_SECOND * sliceDurationSecs,
             "muxer-factory", muxerName,
             "muxer-properties", s,
-            NULL);
+            nullptr);
         g_signal_connect(splitmuxsink, "format-location-full",
             G_CALLBACK(splitmuxsink_on_format_location_full), NULL);
 
@@ -466,7 +466,7 @@ GstElement* get_file_sink(GstBin* pipe)
     auto nextfilename = prepare_next_file_name();
     g_object_set(G_OBJECT(filesink),
         "location", nextfilename.constData(),
-        NULL);
+        nullptr);
 
     ok = gst_element_sync_state_with_parent(filesink);
     g_assert_true(ok);
@@ -474,7 +474,7 @@ GstElement* get_file_sink(GstBin* pipe)
     ok = gst_element_link_many(
         muxer,
         filesink,
-        NULL);
+        nullptr);
     g_assert_true(ok);
 
     return muxer;
@@ -580,7 +580,7 @@ on_incoming_stream (GstElement * webrtc, GstPad * pad, gpointer user_data)
         ok = gst_element_link_many(tee,
             rtpvp8depay,
             queue,
-            NULL);
+            nullptr);
         g_assert_true(ok);
       }
       else
@@ -611,7 +611,7 @@ on_incoming_stream (GstElement * webrtc, GstPad * pad, gpointer user_data)
               audiorate,
               opusenc,
               queue,
-              NULL);
+              nullptr);
           g_assert_true(ok);
       }
 
@@ -712,7 +712,7 @@ on_offer_created (GstPromise * promise, gpointer user_data)
   g_assert_cmphex (gst_promise_wait (promise), ==, GST_PROMISE_RESULT_REPLIED);
   auto reply = gst_promise_get_reply (promise);
   gst_structure_get (reply, "offer",
-      GST_TYPE_WEBRTC_SESSION_DESCRIPTION, &offer, NULL);
+      GST_TYPE_WEBRTC_SESSION_DESCRIPTION, &offer, nullptr);
   gst_promise_unref (promise);
 
   promise = gst_promise_new ();
@@ -820,7 +820,7 @@ on_ice_gathering_state_notify (GstElement * webrtcbin, GParamSpec * pspec,
   GstWebRTCICEGatheringState ice_gather_state;
   const gchar *new_state = "unknown";
 
-  g_object_get (webrtcbin, "ice-gathering-state", &ice_gather_state, NULL);
+  g_object_get (webrtcbin, "ice-gathering-state", &ice_gather_state, nullptr);
   switch (ice_gather_state) {
     case GST_WEBRTC_ICE_GATHERING_STATE_NEW:
       new_state = "new";
@@ -843,7 +843,7 @@ on_ice_connection_state_notify(GstElement * webrtcbin, GParamSpec * pspec,
     GstWebRTCICEConnectionState ice_connection_state;
     const gchar *new_state = "unknown";
 
-    g_object_get(webrtcbin, "ice-connection-state", &ice_connection_state, NULL);
+    g_object_get(webrtcbin, "ice-connection-state", &ice_connection_state, nullptr);
     switch (ice_connection_state) {
     case GST_WEBRTC_ICE_CONNECTION_STATE_NEW:
         new_state = "new";
@@ -920,7 +920,7 @@ on_new_transceiver(GstElement * webrtc, GstWebRTCRTPTransceiver * trans)
 {
     /* If we expected more than one transceiver, we would take a look at
      * trans->mline, and compare it with webrtcbin's local description */
-    g_object_set(trans, "fec-type", GST_WEBRTC_FEC_TYPE_ULP_RED, "do-nack", TRUE, NULL);
+    g_object_set(trans, "fec-type", GST_WEBRTC_FEC_TYPE_ULP_RED, "do-nack", TRUE, nullptr);
 }
 
 static gboolean bus_call(GstBus * /*bus*/, GstMessage *msg, void *user_data)
@@ -1114,7 +1114,7 @@ on_answer_created (GstPromise * promise, gpointer user_data)
   g_assert_cmphex (gst_promise_wait (promise), ==, GST_PROMISE_RESULT_REPLIED);
   auto reply = gst_promise_get_reply (promise);
   gst_structure_get (reply, "answer",
-      GST_TYPE_WEBRTC_SESSION_DESCRIPTION, &answer, NULL);
+      GST_TYPE_WEBRTC_SESSION_DESCRIPTION, &answer, nullptr);
   gst_promise_unref (promise);
 
   promise = gst_promise_new ();

@@ -267,7 +267,7 @@ void Preferences::accept()
             const auto& mode = camera.modes.at(videoResIndex);
             videoLaunchLine = QStringLiteral(
                         "%1 ! video/x-raw,format=%2,width=%3,height=%4,framerate=%5/%6")
-                    .arg(camera.launchLine).arg(mode.format).arg(mode.w).arg(mode.h).arg(mode.den).arg(mode.num);
+                    .arg(camera.launchLine, mode.format).arg(mode.w).arg(mode.h).arg(mode.den).arg(mode.num);
         }
     }
     settings.setValue(SETTING_VIDEO_LAUNCH_LINE, videoLaunchLine);
