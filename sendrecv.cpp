@@ -1,8 +1,9 @@
 #include "sendrecv.h"
 
 #include "isendrecv.h"
-
 #include "signaling_connection.h"
+//#include "globals.h"
+#include "makeguard.h"
 
 #include <gst/gst.h>
 #include <gst/sdp/sdp.h>
@@ -13,30 +14,26 @@
 
 #include <gst/video/videooverlay.h>
 
-/* For signalling */
 #include <json-glib/json-glib.h>
 
-#include "globals.h"
-
-#include "makeguard.h"
-
-#include <QSettings>
-#include <QDateTime>
-#include <QFile>
-#include <QSlider>
-
 #include <cstring>
-
 #include <string>
 #include <string_view>
-
 #include <atomic>
 #include <memory>
 #include <mutex>
 #include <functional>
 
+#include <chrono>
+#include <iomanip>
+#include <sstream>
+#include <filesystem>
+
 #define GST_CAT_DEFAULT webrtc_sendrecv_debug
 GST_DEBUG_CATEGORY_STATIC (GST_CAT_DEFAULT);
+
+// Global settings copy used by free functions. It gets set in start_sendrecv wrapper.
+static Settings g_settings;
 
 static gchar*
 get_string_from_json_object(JsonObject* object)
@@ -142,13 +139,6 @@ static_rtp_packet_loss_probe(GstPad* opad, GstPadProbeInfo* p_info, gpointer /*p
 
 /* GLib weak-ref notify that expects a heap-allocated std::function<void()>
  * as user-data. The function will be invoked (unregister) and deleted.
- *
- * The pattern is:
- *   auto unregister = p_sendrecv->setSendLambda(...); // returns std::function<void()>
- *   if (unregister) {
- *       auto heap = new std::function<void()>(std::move(unregister));
- *       g_object_weak_ref(G_OBJECT(some_gobject), weak_disconnect_function, heap);
- *   }
  */
 static void
 weak_disconnect_function(gpointer data,
@@ -189,29 +179,57 @@ private:
     mutable GWeakRef m_ref;
 };
 
-
-static auto prepare_next_file_name()
+// Generate a unique timestamped filename under g_settings.save_path. Returns a newly g_strdup'd UTF-8 string.
+static gchar* prepare_next_file_name()
 {
-    QDateTime now = QDateTime::currentDateTime();
-    const auto name = now.toString("yyMMddhhmmss");
-    auto path = QSettings().value(SETTING_SAVE_PATH).toString() + '/' + name + ".webm";
+    using namespace std::chrono;
+
+    // Format timestamp as yyMMddHHmmss
+    auto now = system_clock::now();
+    auto t = system_clock::to_time_t(now);
+    std::tm tm{};
+#if defined(_WIN32)
+    localtime_s(&tm, &t);
+#else
+    localtime_r(&t, &tm);
+#endif
+    std::ostringstream ss;
+    ss << std::put_time(&tm, "%y%m%d%H%M%S");
+    std::string name = ss.str();
+
+    // Build base path from g_settings.save_path (PathString)
+    std::filesystem::path base;
+#ifdef _WIN32
+    base = std::filesystem::path(g_settings.save_path);
+#else
+    base = std::filesystem::path(g_settings.save_path);
+#endif
+
     int i = 0;
-    while (QFile::exists(path))
-    {
+    std::filesystem::path candidate;
+    do {
+        std::ostringstream fn;
+        fn << name;
+        if (i > 0) fn << "(" << i << ")";
+        fn << ".webm";
+        candidate = base / fn.str();
         ++i;
-        path = QSettings().value(SETTING_SAVE_PATH).toString() + '/' + name + '(' + QString::number(i) + ").webm";
-    }
-    return QFile::encodeName(path);
+    } while (std::filesystem::exists(candidate));
+
+    // Return UTF-8 allocated string for GLib/GStreamer
+    auto utf8 = candidate.u8string();
+    return g_strdup(utf8.c_str());
 }
 
-static gchar* splitmuxsink_on_format_location_full(GstElement* splitmux,
-    guint fragment_id,
-    GstSample* first_sample,
-    gpointer user_data)
+static gchar* splitmuxsink_on_format_location_full(GstElement* /*splitmux*/,
+    guint /*fragment_id*/,
+    GstSample* /*first_sample*/,
+    gpointer /*user_data*/)
 {
     auto nextfilename = prepare_next_file_name();
-    g_print("New file name generated for recording as %s \n", nextfilename.constData());
-    return g_strdup_printf("%s", nextfilename.constData());
+    g_print("New file name generated for recording as %s \n", nextfilename);
+    // GStreamer expects the returned gchar* to be owned by caller (g_free by sink)
+    return nextfilename;
 }
 
 static gboolean
@@ -436,7 +454,7 @@ GstElement* get_file_sink(GstBin* pipe)
 
     const char muxerName[] = "webmmux";
 
-    const int sliceDurationSecs = getSliceDurationSecs();
+    const int sliceDurationSecs = g_settings.slice_duration_secs;
     if (sliceDurationSecs > 0)
     {
         auto splitmuxsink = gst_element_factory_make("splitmuxsink", file_sink_name);
@@ -474,7 +492,7 @@ GstElement* get_file_sink(GstBin* pipe)
 
     auto nextfilename = prepare_next_file_name();
     g_object_set(G_OBJECT(filesink),
-        "location", nextfilename.constData(),
+        "location", nextfilename,
         nullptr);
 
     ok = gst_element_sync_state_with_parent(filesink);
@@ -485,6 +503,9 @@ GstElement* get_file_sink(GstBin* pipe)
         filesink,
         nullptr);
     g_assert_true(ok);
+
+    // prepare_next_file_name returns newly g_strdup'd string; free it after use.
+    g_free(nextfilename);
 
     return muxer;
 }
@@ -532,7 +553,7 @@ on_incoming_stream (GstElement * webrtc, GstPad * pad, gpointer user_data)
   g_free(str);
 
   int payload = 0;
-  if (QSettings().value(SETTING_DO_SAVE).toBool())
+  if (g_settings.do_save)
   {
       GstStructure *s = gst_caps_get_structure(caps, 0);
       auto ok = gst_structure_get_int(s, "payload", &payload);
@@ -626,7 +647,7 @@ on_incoming_stream (GstElement * webrtc, GstPad * pad, gpointer user_data)
 
       auto srcpad = gst_element_get_static_pad(queue, "src");
       auto sinkpad = gst_element_request_pad_simple(sink,
-            (payload == 97) ? "audio_%u" : ((getSliceDurationSecs() > 0) ? "video" : "video_%u"));
+            (payload == 97) ? "audio_%u" : ((g_settings.slice_duration_secs > 0) ? "video" : "video_%u"));
       auto ret = gst_pad_link(srcpad, sinkpad);
       g_assert_cmphex(ret, == , GST_PAD_LINK_OK);
       gst_object_unref(srcpad);
@@ -987,9 +1008,9 @@ start_pipeline (gboolean create_offer)
   GError *error = nullptr;
 
   std::string turnServer;
-  if (QSettings().value(SETTING_USE_TURN).toBool())
+  if (g_settings.use_turn)
   {
-      turnServer = QSettings().value(SETTING_TURN).toString().trimmed().toStdString();
+      turnServer = g_settings.turn_server;
       if (!turnServer.empty())
       {
           turnServer = " turn-server=turn://" + turnServer + ' ';
@@ -998,14 +1019,14 @@ start_pipeline (gboolean create_offer)
 
   const auto pipeline_description = "webrtcbin bundle-policy=max-bundle name=sendrecv "
       STUN_SERVER + turnServer
-      + QSettings().value(SETTING_VIDEO_LAUNCH_LINE, VIDEO_LAUNCH_LINE_DEFAULT).toString().toStdString() +
+      + g_settings.video_launch_line +
       " ! videoconvert ! queue ! "
       // https://developer.ridgerun.com/wiki/index.php/GstKinesisWebRTC/Getting_Started/C_Example_Application
       "vp8enc error-resilient=partitions keyframe-max-dist=10 deadline=1 ! "
       // picture-id-mode=15-bit seems to make TWCC stats behave better
       "rtpvp8pay name=videopay picture-id-mode=15-bit ! "
       "queue ! " RTP_CAPS_VP8 "96 ! sendrecv. "
-      + QSettings().value(SETTING_AUDIO_LAUNCH_LINE, AUDIO_LAUNCH_LINE_DEFAULT).toString().toStdString() +
+      + g_settings.audio_launch_line +
       " ! audioconvert ! audioresample ! queue ! opusenc ! rtpopuspay name=audiopay ! "
       "queue ! " RTP_CAPS_OPUS "97 ! sendrecv. ";
 
@@ -1337,8 +1358,11 @@ static gpointer glibMainLoopThreadFunc(gpointer data)
 }
 
 
-bool start_sendrecv(unsigned long long winid, ISendRecv* sendrecv)
+bool start_sendrecv(unsigned long long winid, ISendRecv* sendrecv, Settings settings)
 {
+    // store settings globally for free functions to read
+    g_settings = std::move(settings);
+
     if (loop == nullptr) {
         if (!check_plugins ())
             return false;
@@ -1381,7 +1405,7 @@ gboolean start_pipeline(gboolean create_offer)
 }
 
 
-bool start_sendrecv(unsigned long long winid, ISendRecv* isendrecv)
+bool start_sendrecv(unsigned long long winid, ISendRecv* isendrecv, Settings settings)
 {
-    return sendrecv.start_sendrecv(winid, isendrecv);
+    return sendrecv.start_sendrecv(winid, isendrecv, std::move(settings));
 }

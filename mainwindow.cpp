@@ -7,8 +7,11 @@
 #include "sendrecv.h"
 #include "version.h"
 
+#include "globals.h"
+
 #include <QMessageBox>
 #include <QSlider>
+#include <QSettings>
 
 #define STRINGIZE_(str) #str
 #define STRINGIZE(x) STRINGIZE_(x)
@@ -63,7 +66,44 @@ MainWindow::~MainWindow()
 
 void MainWindow::onRingingCall()
 {
-    start_sendrecv(ui->videoArea->winId(), this);
+    // Construct Settings from Qt QSettings (UI layer remains Qt-enabled)
+    Settings settings;
+
+    QString savePath = QSettings().value(SETTING_SAVE_PATH).toString();
+#ifdef _WIN32
+    // On Windows we use std::wstring for path storage
+    settings.save_path = savePath.toStdWString();
+#else
+    settings.save_path = savePath.toStdString();
+#endif
+
+    settings.do_save = QSettings().value(SETTING_DO_SAVE).toBool();
+    settings.use_turn = QSettings().value(SETTING_USE_TURN).toBool();
+    settings.turn_server = QSettings().value(SETTING_TURN).toString().trimmed().toStdString();
+
+    settings.video_launch_line =
+        QSettings().value(SETTING_VIDEO_LAUNCH_LINE, VIDEO_LAUNCH_LINE_DEFAULT)
+            .toString().toStdString();
+    settings.audio_launch_line =
+        QSettings().value(SETTING_AUDIO_LAUNCH_LINE, AUDIO_LAUNCH_LINE_DEFAULT)
+            .toString().toStdString();
+
+    // slice duration: prefer existing setting key or fallback to 0
+    settings.slice_duration_secs = getSliceDurationSecs();
+
+    // Window handle for rendering: use main window handle here.
+    // If you used a dedicated video widget previously, use that widget's winId() instead.
+    unsigned long long winid = static_cast<unsigned long long>(ui->videoArea->winId());
+
+    // Start the send/recv subsystem with the settings copy.
+    // Note: start_sendrecv signature changed to accept Settings by value.
+    if (!start_sendrecv(winid, this, std::move(settings))) {
+        // handle failure (log / UI feedback)
+        qWarning("start_sendrecv failed");
+        return;
+    }
+
+    // UI updates for ringing -> in-call state can continue here...
 }
 
 void MainWindow::onHangUp()
