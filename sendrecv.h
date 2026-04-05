@@ -21,6 +21,7 @@ struct Settings
     std::string video_launch_line;     // pipeline fragment for video source
     std::string audio_launch_line;     // pipeline fragment for audio source
     int slice_duration_secs = 0;       // >0 => enable splitmuxsink slicing
+    std::string session_id;           // session id for signaling (privately shared string)
 };
 
 // Forward declare ISendRecv to avoid header dependency

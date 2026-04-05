@@ -91,6 +91,8 @@ void MainWindow::onRingingCall()
     // slice duration: prefer existing setting key or fallback to 0
     settings.slice_duration_secs = getSliceDurationSecs();
 
+    settings.session_id = QSettings().value(SETTING_SESSION_ID).toString().trimmed().toStdString();
+
     // Window handle for rendering: use main window handle here.
     // If you used a dedicated video widget previously, use that widget's winId() instead.
     unsigned long long winid = static_cast<unsigned long long>(ui->videoArea->winId());

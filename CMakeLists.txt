@@ -57,10 +57,11 @@ else()
 endif()
 
 
+find_package(OpenSSL REQUIRED)
+
 find_package(crossguid CONFIG REQUIRED)
 
 find_package(curl CONFIG REQUIRED)
-
 
 
 find_package(QT NAMES Qt6 Qt5 COMPONENTS Widgets REQUIRED)
@@ -120,7 +121,7 @@ endif()
 
 target_include_directories(webrtc-ui PUBLIC ${GSTREAMER_INCLUDE_DIRS})
 
-target_link_libraries(webrtc-ui PRIVATE Qt${QT_VERSION_MAJOR}::Widgets ${GSTREAMER_LIBRARIES} crossguid CURL::libcurl)
+target_link_libraries(webrtc-ui PRIVATE Qt${QT_VERSION_MAJOR}::Widgets ${GSTREAMER_LIBRARIES} crossguid CURL::libcurl OpenSSL::Crypto)
 
 # Add a custom target to run the shell script before building the project
 add_custom_target(update_version_file

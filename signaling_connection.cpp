@@ -19,15 +19,100 @@
 #include <future>
 #include <mutex>
 
+#ifdef _MSC_VER
+#  undef restrict
+#  define restrict
+#endif
+
+#include <openssl/hmac.h>
+#include <openssl/evp.h> // recommended EVP API
+
+static std::string hmac_sha256(const std::string& key, const std::string& data) {
+    unsigned char out[32];
+    unsigned int out_len = 0;
+
+    HMAC(EVP_sha256(),
+        key.data(), static_cast<int>(key.size()),
+        reinterpret_cast<const unsigned char*>(data.data()), data.size(),
+        out, &out_len);
+
+    return std::string(reinterpret_cast<char*>(out), out_len);
+}
+
+
+static std::string sha256(const std::string& data) {
+    // Compute SHA-256 digest via EVP
+    unsigned char hash[EVP_MAX_MD_SIZE];
+    unsigned int hash_len = 0;
+    EVP_MD_CTX* mdctx = EVP_MD_CTX_new();
+    if (!mdctx)
+        return {};
+
+    if (EVP_DigestInit_ex(mdctx, EVP_sha256(), nullptr) != 1 ||
+        EVP_DigestUpdate(mdctx, reinterpret_cast<const unsigned char*>(data.data()), data.size()) != 1 ||
+        EVP_DigestFinal_ex(mdctx, hash, &hash_len) != 1) {
+        EVP_MD_CTX_free(mdctx);
+        return {};
+    }
+    EVP_MD_CTX_free(mdctx);
+
+    return std::string(reinterpret_cast<char*>(hash), hash_len);
+}
+
+// URL-safe Base64 (RFC 4648 #5) without padding.
+// Input `bin` contains raw bytes (may have '\0' bytes).
+static std::string base64url_encode(const std::string& bin) {
+    static const char alphabet[] =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        "abcdefghijklmnopqrstuvwxyz"
+        "0123456789-_"; // base64url alphabet: '+' -> '-', '/' -> '_'
+    size_t len = bin.size();
+    std::string out;
+    out.reserve(((len + 2) / 3) * 4);
+
+    size_t i = 0;
+    while (i + 2 < len) {
+        unsigned int b0 = static_cast<unsigned char>(bin[i]);
+        unsigned int b1 = static_cast<unsigned char>(bin[i + 1]);
+        unsigned int b2 = static_cast<unsigned char>(bin[i + 2]);
+        out.push_back(alphabet[(b0 >> 2) & 0x3F]);
+        out.push_back(alphabet[((b0 & 0x3) << 4) | ((b1 >> 4) & 0xF)]);
+        out.push_back(alphabet[((b1 & 0xF) << 2) | ((b2 >> 6) & 0x3)]);
+        out.push_back(alphabet[b2 & 0x3F]);
+        i += 3;
+    }
+
+    size_t rem = len - i;
+    if (rem == 1) {
+        unsigned int b0 = static_cast<unsigned char>(bin[i]);
+        out.push_back(alphabet[(b0 >> 2) & 0x3F]);
+        out.push_back(alphabet[((b0 & 0x3) << 4) & 0x3F]);
+        // no padding
+    }
+    else if (rem == 2) {
+        unsigned int b0 = static_cast<unsigned char>(bin[i]);
+        unsigned int b1 = static_cast<unsigned char>(bin[i + 1]);
+        out.push_back(alphabet[(b0 >> 2) & 0x3F]);
+        out.push_back(alphabet[((b0 & 0x3) << 4) | ((b1 >> 4) & 0xF)]);
+        out.push_back(alphabet[((b1 & 0xF) << 2) & 0x3F]);
+        // no padding
+    }
+
+    return out;
+}
+
+
+
 const xg::Guid this_guid = xg::newGuid();
 
-const char send_message_url[] = "https://ntfy.sh/mediaThorSendRecv_%s";
-const char recv_message_url[] = "https://ntfy.sh/mediaThorSendRecv_%s/sse";
+// Use safe URL prefix constants; we'll append hashed session id.
+const char message_url_prefix[] = "https://ntfy.sh/mediaThorSR_";
 
 
 class NtfySignalingConnection : public ISignalingConnection
 {
 public:
+    NtfySignalingConnection(std::string sid) : session_id(std::move(sid)) {}
     ~NtfySignalingConnection() override
     {
         doClose();
@@ -42,9 +127,11 @@ protected:
     {
         const auto message = this_guid.str() + '\n' + text;
 
-        char buffer[1024];
-        sprintf(buffer, send_message_url, QSettings().value(SETTING_SESSION_ID).toString().trimmed().toStdString().c_str());
-        http(HTTP_POST, buffer, nullptr, message.c_str(), message.length());
+
+        std::string hashed = base64url_encode(sha256(session_id));
+        std::string url = message_url_prefix + hashed;
+
+        http(HTTP_POST, url.c_str(), nullptr, message.c_str(), message.length());
     }
 
     static const char* verify_sse_response(CURL* curl) {
@@ -125,11 +212,48 @@ protected:
                                             break; //goto out;
 
                                         const auto message = pos + 1;
-                                        const bool is_syn = g_strcmp0(message, "SYN") == 0;
-                                        if (is_syn)
-                                            send_text("ACK");
 
-                                        if (is_syn || g_strcmp0(message, "ACK") == 0) {
+                                        // SYN <macA>
+                                        const auto is_syn = g_str_has_prefix(message, "SYN");
+                                        if (is_syn) {
+                                            // macA
+                                            const char* macA = message + 4; // after "SYN "
+
+                                            // expected macA
+                                            std::string expectedA = base64url_encode(hmac_sha256(session_id, their_giud.str() + "A"));
+
+                                            if (expectedA != macA) {
+                                                qCritical() << "MAC A mismatch, dropping connection";
+                                                requestInterrupted = true;
+                                                return size * nmemb;
+                                            }
+
+                                            // ACK <macB>
+                                            std::string min_id = (std::min)(this_guid.str(), their_giud.str());
+                                            std::string max_id = (std::max)(this_guid.str(), their_giud.str());
+                                            std::string macB = base64url_encode(hmac_sha256(session_id, min_id + max_id + "B"));
+                                            std::string ack_msg = "ACK " + macB;
+                                            send_text(ack_msg.data());
+                                        }
+
+                                        // ACK <macB>
+                                        const auto is_ack = !is_syn && g_str_has_prefix(message, "ACK");
+                                        if (is_ack) {
+
+                                            const char* macB = message + 4;
+
+                                            std::string min_id = (std::min)(this_guid.str(), their_giud.str());
+                                            std::string max_id = (std::max)(this_guid.str(), their_giud.str());
+                                            std::string expectedB = base64url_encode(hmac_sha256(session_id, min_id + max_id + "B"));
+
+                                            if (expectedB != macB) {
+                                                qCritical() << "MAC B mismatch, dropping connection";
+                                                requestInterrupted = true;
+                                                return size * nmemb;
+                                            }
+                                        }
+
+                                        if (is_syn || is_ack) {
                                             if (set_connected()) {
                                                 /* Start negotiation (exchange SDP and ICE candidates) */
                                                 if (we_create_offer() && !start_pipeline(TRUE))
@@ -161,9 +285,12 @@ protected:
                         return requestInterrupted;
                 };
 
-                char buffer[1024];
-                sprintf(buffer, recv_message_url, QSettings().value(SETTING_SESSION_ID).toString().trimmed().toStdString().c_str());
-                http(HTTP_GET, buffer, headers, nullptr, 0, on_data, verify_sse_response, progress_callback);
+
+                // Build recv URL with hashed session id
+                std::string hashed = base64url_encode(sha256(session_id));
+                std::string url = message_url_prefix + hashed + "/sse";
+
+                http(HTTP_GET, url.c_str(), headers, nullptr, 0, on_data, verify_sse_response, progress_callback);
         };
 
         // https://stackoverflow.com/a/23454840/10472202
@@ -172,7 +299,10 @@ protected:
         if (!startedResult.get())
             return false;
 
-        send_text("SYN");
+        std::string macA = base64url_encode(hmac_sha256(session_id, this_guid.str() + "A"));
+
+        std::string syn_msg = "SYN " + macA;
+        send_text(syn_msg.data());
 
         return true;
     }
@@ -202,9 +332,11 @@ private:
 
     std::atomic_bool requestInterrupted = false;
     std::once_flag once_closed;
+
+    std::string session_id;
 };
 
-std::unique_ptr<ISignalingConnection> get_signaling_connection()
+std::unique_ptr<ISignalingConnection> get_signaling_connection(std::string sid)
 {
-    return std::make_unique<NtfySignalingConnection>();
+    return std::make_unique<NtfySignalingConnection>(std::move(sid));
 }

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <string>
 #include <memory>
 
 struct ISignalingConnection {
@@ -10,4 +11,4 @@ struct ISignalingConnection {
     virtual void close() = 0;
 };
 
-std::unique_ptr<ISignalingConnection> get_signaling_connection();
+std::unique_ptr<ISignalingConnection> get_signaling_connection(std::string sid);

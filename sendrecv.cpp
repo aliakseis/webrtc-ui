@@ -1327,7 +1327,7 @@ static gpointer glibMainLoopThreadFunc(gpointer data)
 {
     auto self = static_cast<SendRecv *>(data);
 
-    self->signaling_connection = get_signaling_connection();
+    self->signaling_connection = get_signaling_connection(g_settings.session_id);
 
     self->loop = g_main_loop_new(nullptr, false);
 
