@@ -10,7 +10,11 @@ inline const auto SETTING_TURN = QStringLiteral("TURN");
 inline const auto SETTING_VIDEO_LAUNCH_LINE = QStringLiteral("videoLaunchLine");
 inline const auto SETTING_AUDIO_LAUNCH_LINE = QStringLiteral("audioLaunchLine");
 
+#ifdef _WIN32
+inline const auto VIDEO_LAUNCH_LINE_DEFAULT = QStringLiteral("mfvideosrc");
+#else
 inline const auto VIDEO_LAUNCH_LINE_DEFAULT = QStringLiteral("autovideosrc");
+#endif
 inline const auto AUDIO_LAUNCH_LINE_DEFAULT = QStringLiteral("autoaudiosrc");
 
 inline const auto SETTING_DO_SAVE = QStringLiteral("doSave");

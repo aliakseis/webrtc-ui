@@ -419,6 +419,8 @@ on_incoming_decodebin_stream (GstElement * decodebin, GstPad * pad,
 {
     auto self = static_cast<SendRecv*>(user_data);
 
+    g_print("webrtcbin PAD ADDED: %s\n", GST_PAD_NAME(pad));
+
   if (!gst_pad_has_current_caps (pad)) {
     gst_printerr ("Pad '%s' has no caps, can't do anything, ignoring\n",
         GST_PAD_NAME (pad));
@@ -426,11 +428,19 @@ on_incoming_decodebin_stream (GstElement * decodebin, GstPad * pad,
   }
 
   auto caps = gst_pad_get_current_caps (pad);
-  auto name = gst_structure_get_name (gst_caps_get_structure (caps, 0));
-
+  auto name = gst_structure_get_name(gst_caps_get_structure(caps, 0));
+  
   auto str = gst_caps_to_string(caps);
   g_print("on_incoming_decodebin_stream pad caps: %s\n", str);
   g_free(str);
+
+  if (auto ps = gst_caps_get_structure(caps, 0)) {
+      const gchar *enc = gst_structure_get_string(ps, "encoding-name");
+      const gchar *media = gst_structure_get_name(ps);
+      g_print("decodebin stream: media=%s encoding-name=%s\n",
+              media ? media : "null",
+              enc ? enc : "null");
+  }
 
   if (g_str_has_prefix (name, "video")) {
     auto sink = find_video_sink();
@@ -552,14 +562,32 @@ on_incoming_stream (GstElement * webrtc, GstPad * pad, gpointer user_data)
   g_print("on_incoming_stream pad caps: %s\n", str);
   g_free(str);
 
-  int payload = 0;
+  // Add this to inspect structure content
+  bool is_vp8 = false;
+  bool is_opus = false;
   if (g_settings.do_save)
   {
-      GstStructure *s = gst_caps_get_structure(caps, 0);
-      auto ok = gst_structure_get_int(s, "payload", &payload);
-      g_assert_true(ok);
+      GstStructure* s = gst_caps_get_structure(caps, 0);
+      if (s) {
+          gchar* sstr = gst_structure_to_string(s);
+          g_print("on_incoming_stream structure: %s\n", sstr);
+          g_free(sstr);
+      }
+
+      // Replace the payload-detection + branch in on_incoming_stream with codec-name detection
+      GstStructure* dstruct = gst_caps_get_structure(caps, 0);
+      const gchar* encoding_name = gst_structure_has_field(dstruct, "encoding-name")
+          ? gst_structure_get_string(dstruct, "encoding-name")
+          : nullptr;
+      g_print("Incoming encoding-name: %s\n", encoding_name ? encoding_name : "null");
+
+      // Decide codec by name instead of hard-coded payload number.
+      // Treat VP8 as video, OPUS as audio.
+      is_vp8 = (encoding_name && g_str_equal(encoding_name, "VP8"));
+      is_opus = (encoding_name && g_str_equal(encoding_name, "OPUS"));
   }
-  if (payload == 96 || payload == 97)
+
+  if (is_vp8 || is_opus)
   {
       auto tee = gst_element_factory_make("tee", nullptr);
       gst_bin_add(GST_BIN(self->pipe1), tee);
@@ -580,39 +608,33 @@ on_incoming_stream (GstElement * webrtc, GstPad * pad, gpointer user_data)
           gst_object_unref(sinkpad);
       }
 
-      auto rtpvp8depay = gst_element_factory_make(
-          (payload == 96) ? "rtpvp8depay" : "rtpopusdepay", nullptr);
-
-      auto ok = gst_bin_add(GST_BIN(self->pipe1), rtpvp8depay);
+      // pick depayper by codec name
+      const char* depay_name = is_vp8 ? "rtpvp8depay" : "rtpopusdepay";
+      auto depay = gst_element_factory_make(depay_name, nullptr);
+      auto ok = gst_bin_add(GST_BIN(self->pipe1), depay);
       g_assert_true(ok);
-
-      ok = gst_element_sync_state_with_parent(rtpvp8depay);
+      ok = gst_element_sync_state_with_parent(depay);
       g_assert_true(ok);
 
       auto queue = gst_element_factory_make("queue", nullptr);
-
       ok = gst_bin_add(GST_BIN(self->pipe1), queue);
       g_assert_true(ok);
-
       ok = gst_element_sync_state_with_parent(queue);
       g_assert_true(ok);
 
       auto sink = self->get_file_sink(GST_BIN(self->pipe1));
 
-      if (payload == 96)
+      if (is_vp8)
       {
         self->last_video_pts = {};
 
-        auto srcpad = gst_element_get_static_pad(rtpvp8depay, "src");
+        auto srcpad = gst_element_get_static_pad(depay, "src");
         gst_pad_add_probe(srcpad, GST_PAD_PROBE_TYPE_BUFFER, gst_pad_probe_callback, self, nullptr);
 
-        ok = gst_element_link_many(tee,
-            rtpvp8depay,
-            queue,
-            nullptr);
+        ok = gst_element_link_many(tee, depay, queue, nullptr);
         g_assert_true(ok);
       }
-      else
+      else // OPUS
       {
           auto opusdec = gst_element_factory_make("opusdec", nullptr);
           ok = gst_bin_add(GST_BIN(self->pipe1), opusdec);
@@ -620,34 +642,26 @@ on_incoming_stream (GstElement * webrtc, GstPad * pad, gpointer user_data)
           ok = gst_element_sync_state_with_parent(opusdec);
           g_assert_true(ok);
 
-          //audiorate
           auto audiorate = gst_element_factory_make("audiorate", nullptr);
           ok = gst_bin_add(GST_BIN(self->pipe1), audiorate);
           g_assert_true(ok);
           ok = gst_element_sync_state_with_parent(audiorate);
           g_assert_true(ok);
 
-          //opusenc
           auto opusenc = gst_element_factory_make("opusenc", nullptr);
           ok = gst_bin_add(GST_BIN(self->pipe1), opusenc);
           g_assert_true(ok);
           ok = gst_element_sync_state_with_parent(opusenc);
           g_assert_true(ok);
 
-          ok = gst_element_link_many(tee,
-              rtpvp8depay,
-              opusdec,
-              audiorate,
-              opusenc,
-              queue,
-              nullptr);
+          ok = gst_element_link_many(tee, depay, opusdec, audiorate, opusenc, queue, nullptr);
           g_assert_true(ok);
       }
 
 
       auto srcpad = gst_element_get_static_pad(queue, "src");
       auto sinkpad = gst_element_request_pad_simple(sink,
-            (payload == 97) ? "audio_%u" : ((g_settings.slice_duration_secs > 0) ? "video" : "video_%u"));
+        is_opus ? "audio_%u" : ((g_settings.slice_duration_secs > 0) ? "video" : "video_%u"));
       auto ret = gst_pad_link(srcpad, sinkpad);
       g_assert_cmphex(ret, == , GST_PAD_LINK_OK);
       gst_object_unref(srcpad);
@@ -992,6 +1006,19 @@ static gboolean bus_call(GstBus * /*bus*/, GstMessage *msg, void *user_data)
             g_print("Reconfigured latency.\n");
         break;
     }
+    case GST_MESSAGE_STATE_CHANGED:
+    {
+        GstState old, new_, pending;
+        gst_message_parse_state_changed(msg, &old, &new_, &pending);
+
+        const gchar* name = GST_OBJECT_NAME(msg->src);
+
+        g_print("STATE CHANGE: %s: %s -> %s\n",
+            name,
+            gst_element_state_get_name(old),
+            gst_element_state_get_name(new_));
+        break;
+    }
     default:
         break;
     }
@@ -1004,39 +1031,43 @@ static gboolean bus_call(GstBus * /*bus*/, GstMessage *msg, void *user_data)
 gboolean
 start_pipeline (gboolean create_offer)
 {
-  GstStateChangeReturn ret;
-  GError *error = nullptr;
+   std::string turnServer;
+   if (g_settings.use_turn)
+   {
+       turnServer = g_settings.turn_server;
+       if (!turnServer.empty())
+       {
+           turnServer = " turn-server=turn://" + turnServer + ' ';
+       }
+   }
+ 
+   const auto pipeline_description = "webrtcbin bundle-policy=max-bundle name=sendrecv "
+       STUN_SERVER + turnServer
+       + g_settings.video_launch_line +
+       " ! videoconvert ! queue ! "
+       // https://developer.ridgerun.com/wiki/index.php/GstKinesisWebRTC/Getting_Started/C_Example_Application
+       "vp8enc error-resilient=partitions keyframe-max-dist=10 deadline=1 ! "
+       // picture-id-mode=15-bit seems to make TWCC stats behave better
+       "rtpvp8pay name=videopay picture-id-mode=15-bit ! "
+       "queue ! " RTP_CAPS_VP8 "96 ! sendrecv. "
+       + g_settings.audio_launch_line +
+       " ! audioconvert ! audioresample ! queue ! opusenc ! rtpopuspay name=audiopay ! "
+       "queue ! " RTP_CAPS_OPUS "97 ! sendrecv. ";
 
-  std::string turnServer;
-  if (g_settings.use_turn)
-  {
-      turnServer = g_settings.turn_server;
-      if (!turnServer.empty())
-      {
-          turnServer = " turn-server=turn://" + turnServer + ' ';
-      }
-  }
+   GError *error = nullptr;
+   pipe1 = gst_parse_launch (pipeline_description.c_str(), &error);
 
-  const auto pipeline_description = "webrtcbin bundle-policy=max-bundle name=sendrecv "
-      STUN_SERVER + turnServer
-      + g_settings.video_launch_line +
-      " ! videoconvert ! queue ! "
-      // https://developer.ridgerun.com/wiki/index.php/GstKinesisWebRTC/Getting_Started/C_Example_Application
-      "vp8enc error-resilient=partitions keyframe-max-dist=10 deadline=1 ! "
-      // picture-id-mode=15-bit seems to make TWCC stats behave better
-      "rtpvp8pay name=videopay picture-id-mode=15-bit ! "
-      "queue ! " RTP_CAPS_VP8 "96 ! sendrecv. "
-      + g_settings.audio_launch_line +
-      " ! audioconvert ! audioresample ! queue ! opusenc ! rtpopuspay name=audiopay ! "
-      "queue ! " RTP_CAPS_OPUS "97 ! sendrecv. ";
+   if (!gst_bin_get_by_name(GST_BIN(pipe1), "videopay"))
+       g_printerr("videopay missing\n");
 
-  pipe1 = gst_parse_launch (pipeline_description.c_str(), &error);
+   if (!gst_bin_get_by_name(GST_BIN(pipe1), "audiopay"))
+       g_printerr("audiopay missing\n");
 
-  if (error) {
-    gst_printerr ("Failed to parse launch: %s\n", error->message);
-    g_error_free (error);
-    goto err;
-  }
+   if (error) {
+     gst_printerr ("Failed to parse launch: %s\n", error->message);
+     g_error_free (error);
+     goto err;
+   }
 
   // add bus call
   GstBus *bus = gst_pipeline_get_bus(GST_PIPELINE(pipe1));
@@ -1130,17 +1161,24 @@ start_pipeline (gboolean create_offer)
   webrtcbin_get_stats_id = g_timeout_add (100, (GSourceFunc) webrtcbin_get_stats, this);
 
   gst_print ("Starting pipeline\n");
-  ret = gst_element_set_state (GST_ELEMENT (pipe1), GST_STATE_PLAYING);
+  auto ret = gst_element_set_state (GST_ELEMENT (pipe1), GST_STATE_PLAYING);
   if (ret == GST_STATE_CHANGE_FAILURE)
     goto err;
 
   return TRUE;
 
-err:
-  if (pipe1)
-    g_clear_object (&pipe1);
-  if (webrtc1)
-    webrtc1 = nullptr;
+ err:
+  // Ensure pipeline transitions to NULL before we unref/clear it to avoid
+  // "Trying to dispose element ... is in READY instead of the NULL state" warnings.
+  if (pipe1) {
+      gst_element_set_state (GST_ELEMENT (pipe1), GST_STATE_NULL);
+      // give elements a moment to settle (optional); usually immediate is fine
+      gst_object_unref (pipe1);
+      pipe1 = nullptr;
+  }
+  if (webrtc1) {
+      webrtc1 = nullptr;
+  }
   return FALSE;
 }
 
@@ -1240,6 +1278,12 @@ void on_server_message(const gchar *text) {
     auto root = json_parser_get_root (parser);
     if (!JSON_NODE_HOLDS_OBJECT (root)) {
       gst_printerr ("Unknown json message '%s', ignoring\n", text);
+      g_object_unref (parser);
+      return;
+    }
+
+    if (!signaling_connection) {
+      gst_printerr ("Received JSON message in wrong state, ignoring\n");
       g_object_unref (parser);
       return;
     }
