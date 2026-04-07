@@ -2,460 +2,208 @@
 <ui version="4.0">
  <class>Preferences</class>
  <widget class="QDialog" name="Preferences">
-  <property name="geometry">
-   <rect>
-    <x>0</x>
-    <y>0</y>
-    <width>680</width>
-    <height>357</height>
-   </rect>
-  </property>
-  <property name="sizePolicy">
-   <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
-    <horstretch>0</horstretch>
-    <verstretch>0</verstretch>
-   </sizepolicy>
-  </property>
   <property name="windowTitle">
    <string>Settings</string>
   </property>
-  <widget class="QWidget" name="layoutWidget">
-   <property name="geometry">
-    <rect>
-     <x>0</x>
-     <y>0</y>
-     <width>681</width>
-     <height>320</height>
-    </rect>
-   </property>
-   <layout class="QVBoxLayout" name="verticalLayout_4" stretch="0,0,0,0,0">
-    <property name="spacing">
-     <number>6</number>
-    </property>
-    <property name="leftMargin">
-     <number>6</number>
-    </property>
-    <property name="topMargin">
-     <number>9</number>
-    </property>
-    <property name="rightMargin">
-     <number>6</number>
-    </property>
-    <property name="bottomMargin">
-     <number>6</number>
-    </property>
-    <item>
-     <layout class="QHBoxLayout" name="horizontalLayout_9">
-      <property name="leftMargin">
-       <number>9</number>
-      </property>
-      <property name="rightMargin">
-       <number>9</number>
-      </property>
-      <item>
-       <widget class="QLabel" name="label">
-        <property name="text">
-         <string>Session ID:</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QLineEdit" name="lineEdit_SessionID"/>
-      </item>
-     </layout>
-    </item>
-    <item>
-     <widget class="QGroupBox" name="groupBox_camera">
-      <property name="sizePolicy">
-       <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
-        <horstretch>0</horstretch>
-        <verstretch>0</verstretch>
-       </sizepolicy>
-      </property>
-      <property name="title">
-       <string>Camera</string>
-      </property>
-      <layout class="QGridLayout" name="gridLayout_4">
-       <item row="1" column="0">
-        <widget class="QRadioButton" name="gstreamerSource">
-         <property name="text">
-          <string>GStreamer source</string>
-         </property>
-        </widget>
-       </item>
-       <item row="1" column="1">
-        <layout class="QHBoxLayout" name="horizontalLayout_2">
-         <item>
-          <widget class="QComboBox" name="comboBox_camera">
-           <property name="sizePolicy">
-            <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
-             <horstretch>0</horstretch>
-             <verstretch>0</verstretch>
-            </sizepolicy>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QPushButton" name="pushButton_update_camera_list">
-           <property name="sizePolicy">
-            <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
-             <horstretch>0</horstretch>
-             <verstretch>0</verstretch>
-            </sizepolicy>
-           </property>
+
+  <layout class="QVBoxLayout" name="mainLayout">
+   <property name="spacing"><number>10</number></property>
+   <property name="margin"><number>12</number></property>
+
+   <!-- Session ID -->
+   <item>
+    <layout class="QFormLayout" name="form_session">
+     <item row="0" column="0">
+      <widget class="QLabel" name="label_session">
+       <property name="text"><string>Session ID:</string></property>
+      </widget>
+     </item>
+     <item row="0" column="1">
+      <widget class="QLineEdit" name="lineEdit_SessionID"/>
+     </item>
+    </layout>
+   </item>
+
+   <!-- Camera -->
+<item>
+ <widget class="QGroupBox" name="groupBox_camera">
+  <property name="title"><string>Camera</string></property>
+  <layout class="QVBoxLayout" name="layout_camera">
+
+   <item>
+    <widget class="QRadioButton" name="autoVideoSrc">
+     <property name="text"><string>Auto video source</string></property>
+    </widget>
+   </item>
+
+   <item>
+    <layout class="QHBoxLayout" name="layout_camera_source">
+     <item>
+      <widget class="QRadioButton" name="gstreamerSource">
+       <property name="text"><string>GStreamer source</string></property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QComboBox" name="comboBox_camera"/>
+     </item>
+     <item>
+      <widget class="QPushButton" name="pushButton_update_camera_list">
            <property name="toolTip">
-            <string>
-                     Click to update the list of available
-                     cameras. Useful if connection and USB camera
-                   </string>
+            <string>Click to update the list of available
+cameras. Useful if connection and USB camera</string>
            </property>
-           <property name="text">
-            <string>Update</string>
-           </property>
-          </widget>
-         </item>
-        </layout>
-       </item>
-       <item row="2" column="0" colspan="2">
-        <layout class="QHBoxLayout" name="verticalLayout_9">
-         <item>
-          <widget class="QLabel" name="label_camera">
-           <property name="sizePolicy">
-            <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
-             <horstretch>0</horstretch>
-             <verstretch>0</verstretch>
-            </sizepolicy>
-           </property>
-           <property name="text">
-            <string/>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <spacer name="horizontalSpacer">
-           <property name="orientation">
-            <enum>Qt::Horizontal</enum>
-           </property>
-           <property name="sizeType">
-            <enum>QSizePolicy::Minimum</enum>
-           </property>
-           <property name="sizeHint" stdset="0">
-            <size>
-             <width>10</width>
-             <height>20</height>
-            </size>
-           </property>
-          </spacer>
-         </item>
-         <item>
-          <widget class="QLabel" name="label_8">
-           <property name="sizePolicy">
-            <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
-             <horstretch>0</horstretch>
-             <verstretch>0</verstretch>
-            </sizepolicy>
-           </property>
-           <property name="text">
-            <string>Resolution and FPS</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QComboBox" name="comboBox_camera_res"/>
-         </item>
-        </layout>
-       </item>
-       <item row="0" column="0">
-        <widget class="QRadioButton" name="autoVideoSrc">
-         <property name="text">
-          <string>Auto video source</string>
-         </property>
-        </widget>
-       </item>
-      </layout>
-     </widget>
-    </item>
-    <item>
-     <widget class="QGroupBox" name="groupBox_audio">
-      <property name="sizePolicy">
-       <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
-        <horstretch>0</horstretch>
-        <verstretch>0</verstretch>
-       </sizepolicy>
-      </property>
-      <property name="title">
-       <string>Audio</string>
-      </property>
-      <layout class="QGridLayout" name="gridLayout_4">
-       <item row="1" column="0">
-        <widget class="QRadioButton" name="gstreamerAudioSource">
-         <property name="text">
-          <string>GStreamer source</string>
-         </property>
-        </widget>
-       </item>
-       <item row="1" column="1">
-        <layout class="QHBoxLayout" name="horizontalLayout_2">
-         <item>
-          <widget class="QComboBox" name="comboBox_audio">
-           <property name="sizePolicy">
-            <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
-             <horstretch>0</horstretch>
-             <verstretch>0</verstretch>
-            </sizepolicy>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QPushButton" name="pushButton_update_audio_list">
-           <property name="sizePolicy">
-            <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
-             <horstretch>0</horstretch>
-             <verstretch>0</verstretch>
-            </sizepolicy>
-           </property>
-           <property name="toolTip">
-            <string>
-                     Click to update the list of available
-                     audio inputs. Useful if connection and USB audio
-                   </string>
-           </property>
-           <property name="text">
-            <string>Update</string>
-           </property>
-          </widget>
-         </item>
-        </layout>
-       </item>
-       <item row="2" column="0" colspan="2">
-        <widget class="QLabel" name="label_audio">
-         <property name="sizePolicy">
-          <sizepolicy hsizetype="Maximum" vsizetype="Preferred">
-           <horstretch>0</horstretch>
-           <verstretch>0</verstretch>
-          </sizepolicy>
-         </property>
-         <property name="text">
-          <string/>
-         </property>
-        </widget>
-       </item>
-       <item row="0" column="0">
-        <widget class="QRadioButton" name="autoAudioSrc">
-         <property name="text">
-          <string>Auto audio source</string>
-         </property>
-        </widget>
-       </item>
-      </layout>
-     </widget>
-    </item>
-    <item>
-     <layout class="QHBoxLayout" name="horizontalLayout_19">
-      <property name="leftMargin">
-       <number>9</number>
-      </property>
-      <property name="rightMargin">
-       <number>9</number>
-      </property>
-      <item>
-       <widget class="QCheckBox" name="checkBox_TURN">
-        <property name="sizePolicy">
-         <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
-          <horstretch>0</horstretch>
-          <verstretch>0</verstretch>
-         </sizepolicy>
-        </property>
-        <property name="focusPolicy">
-         <enum>Qt::StrongFocus</enum>
-        </property>
-        <property name="text">
-         <string>TURN</string>
-        </property>
-        <property name="checked">
-         <bool>false</bool>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QLineEdit" name="lineEdit_TURN"/>
-      </item>
-     </layout>
-    </item>
-    <item>
-     <layout class="QHBoxLayout" name="horizontalLayout_4">
-      <property name="leftMargin">
-       <number>9</number>
-      </property>
-      <property name="rightMargin">
-       <number>9</number>
-      </property>
-      <item>
-       <widget class="QCheckBox" name="checkBox_save">
-        <property name="sizePolicy">
-         <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
-          <horstretch>0</horstretch>
-          <verstretch>0</verstretch>
-         </sizepolicy>
-        </property>
-        <property name="focusPolicy">
-         <enum>Qt::StrongFocus</enum>
-        </property>
-        <property name="text">
-         <string>Save</string>
-        </property>
-        <property name="checked">
-         <bool>false</bool>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QLabel" name="label_22">
-        <property name="sizePolicy">
-         <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
-          <horstretch>0</horstretch>
-          <verstretch>24</verstretch>
-         </sizepolicy>
-        </property>
-        <property name="minimumSize">
-         <size>
-          <width>0</width>
-          <height>24</height>
-         </size>
-        </property>
-        <property name="text">
-         <string>Path</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QLineEdit" name="lineEdit_SavePath">
-        <property name="sizePolicy">
-         <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
-          <horstretch>0</horstretch>
-          <verstretch>24</verstretch>
-         </sizepolicy>
-        </property>
-        <property name="minimumSize">
-         <size>
-          <width>0</width>
-          <height>24</height>
-         </size>
-        </property>
-        <property name="font">
-         <font>
-          <pointsize>8</pointsize>
-         </font>
-        </property>
-        <property name="text">
-         <string/>
-        </property>
-        <property name="alignment">
-         <set>Qt::AlignCenter</set>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QPushButton" name="pushButton_chooseSavePath">
-        <property name="sizePolicy">
-         <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
-          <horstretch>0</horstretch>
-          <verstretch>0</verstretch>
-         </sizepolicy>
-        </property>
-        <property name="toolTip">
-         <string>
-                     Click to choose a path to save the videos.
-                   </string>
-        </property>
-        <property name="text">
-         <string>Choose</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QLabel" name="label_13">
-        <property name="sizePolicy">
-         <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
-          <horstretch>0</horstretch>
-          <verstretch>24</verstretch>
-         </sizepolicy>
-        </property>
-        <property name="minimumSize">
-         <size>
-          <width>0</width>
-          <height>24</height>
-         </size>
-        </property>
-        <property name="text">
-         <string>Slice duration</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QComboBox" name="comboBox_SliceDuration">
-        <property name="sizePolicy">
-         <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
-          <horstretch>0</horstretch>
-          <verstretch>0</verstretch>
-         </sizepolicy>
-        </property>
-       </widget>
-      </item>
-     </layout>
-    </item>
-   </layout>
-  </widget>
-  <widget class="QDialogButtonBox" name="buttonBox">
-   <property name="geometry">
-    <rect>
-     <x>330</x>
-     <y>320</y>
-     <width>341</width>
-     <height>32</height>
-    </rect>
-   </property>
-   <property name="orientation">
-    <enum>Qt::Horizontal</enum>
-   </property>
-   <property name="standardButtons">
-    <set>QDialogButtonBox::Cancel|QDialogButtonBox::Ok</set>
-   </property>
-  </widget>
+       <property name="text"><string>Update</string></property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+
+   <item>
+    <widget class="QLabel" name="label_camera">
+     <property name="text"><string/></property>
+    </widget>
+   </item>
+
+   <item>
+    <layout class="QFormLayout" name="layout_camera_res">
+     <item row="0" column="0">
+      <widget class="QLabel" name="label_8">
+       <property name="text"><string>Resolution and FPS</string></property>
+      </widget>
+     </item>
+     <item row="0" column="1">
+      <widget class="QComboBox" name="comboBox_camera_res"/>
+     </item>
+    </layout>
+   </item>
+
+  </layout>
  </widget>
- <resources/>
+</item>
+
+   <!-- Audio -->
+   <item>
+    <widget class="QGroupBox" name="groupBox_audio">
+     <property name="title"><string>Audio</string></property>
+     <layout class="QVBoxLayout" name="layout_audio">
+
+      <item>
+       <widget class="QRadioButton" name="autoAudioSrc">
+        <property name="text"><string>Auto audio source</string></property>
+       </widget>
+      </item>
+
+      <item>
+       <layout class="QHBoxLayout" name="layout_audio_source">
+        <item>
+         <widget class="QRadioButton" name="gstreamerAudioSource">
+          <property name="text"><string>GStreamer source</string></property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QComboBox" name="comboBox_audio"/>
+        </item>
+        <item>
+         <widget class="QPushButton" name="pushButton_update_audio_list">
+           <property name="toolTip">
+            <string>Click to update the list of available
+audio inputs. Useful if connection and USB audio</string>
+           </property>
+          <property name="text"><string>Update</string></property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+
+      <item>
+       <widget class="QLabel" name="label_audio"/>
+      </item>
+
+     </layout>
+    </widget>
+   </item>
+
+   <!-- TURN -->
+   <item>
+    <layout class="QHBoxLayout" name="layout_turn">
+     <item>
+      <widget class="QCheckBox" name="checkBox_TURN">
+       <property name="text"><string>TURN</string></property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLineEdit" name="lineEdit_TURN"/>
+     </item>
+    </layout>
+   </item>
+
+   <!-- Save -->
+   <item>
+    <layout class="QHBoxLayout" name="layout_save">
+     <item>
+      <widget class="QCheckBox" name="checkBox_save">
+       <property name="text"><string>Save</string></property>
+      </widget>
+     </item>
+
+     <item>
+      <widget class="QLabel" name="label_22">
+       <property name="text"><string>Path</string></property>
+      </widget>
+     </item>
+
+     <item>
+      <widget class="QLineEdit" name="lineEdit_SavePath">
+       <property name="alignment"><set>Qt::AlignCenter</set></property>
+      </widget>
+     </item>
+
+     <item>
+      <widget class="QPushButton" name="pushButton_chooseSavePath">
+        <property name="toolTip">
+         <string>Click to choose a path to save the videos.</string>
+        </property>
+       <property name="text"><string>Choose</string></property>
+      </widget>
+     </item>
+
+     <item>
+      <widget class="QLabel" name="label_13">
+       <property name="text"><string>Slice duration</string></property>
+      </widget>
+     </item>
+
+     <item>
+      <widget class="QComboBox" name="comboBox_SliceDuration"/>
+     </item>
+    </layout>
+   </item>
+
+   <!-- Buttons -->
+   <item>
+    <widget class="QDialogButtonBox" name="buttonBox">
+     <property name="standardButtons">
+      <set>QDialogButtonBox::Ok|QDialogButtonBox::Cancel</set>
+     </property>
+    </widget>
+   </item>
+
+  </layout>
+
+ </widget>
+
  <connections>
   <connection>
    <sender>buttonBox</sender>
    <signal>accepted()</signal>
    <receiver>Preferences</receiver>
    <slot>accept()</slot>
-   <hints>
-    <hint type="sourcelabel">
-     <x>248</x>
-     <y>254</y>
-    </hint>
-    <hint type="destinationlabel">
-     <x>157</x>
-     <y>274</y>
-    </hint>
-   </hints>
   </connection>
   <connection>
    <sender>buttonBox</sender>
    <signal>rejected()</signal>
    <receiver>Preferences</receiver>
    <slot>reject()</slot>
-   <hints>
-    <hint type="sourcelabel">
-     <x>316</x>
-     <y>260</y>
-    </hint>
-    <hint type="destinationlabel">
-     <x>286</x>
-     <y>274</y>
-    </hint>
-   </hints>
   </connection>
  </connections>
 </ui>
