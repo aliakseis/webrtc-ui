@@ -164,6 +164,8 @@ protected:
                 };
 
                 auto on_data = [this, &startedPromise](char *ptr, size_t size, size_t nmemb)->size_t {
+                    if (requestInterrupted)
+                        return size * nmemb;
                     try {
                         const auto ptrEnd = ptr + size * nmemb;
 
