@@ -12,7 +12,6 @@
 
 #include <crossguid/guid.hpp>
 
-#include <QSettings>
 #include <QDebug>
 
 #include <thread>
