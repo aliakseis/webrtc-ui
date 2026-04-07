@@ -7,7 +7,7 @@
 const char PROP_ACTIVE[] = "active";
 
 MainToolBar::MainToolBar(QWidget* parent)
-    : QWidget(parent), m_activeTabIndex(HANG_UP_TAB), ui(new Ui::MainToolBar)
+    : QWidget(parent), m_activeTabIndex(RINGING_CALL_TAB), ui(new Ui::MainToolBar)
 {
     ui->setupUi(this);
     m_tabs = { {RINGING_CALL_TAB, ui->btnRingingCall},
@@ -19,18 +19,18 @@ MainToolBar::~MainToolBar() { delete ui; }
 
 void MainToolBar::on_btnRingingCall_clicked()
 {
-    if (m_activeTabIndex != RINGING_CALL_TAB)
+    if (m_activeTabIndex != HANG_UP_TAB)
     {
-        activateTab(RINGING_CALL_TAB);
+        activateTab(HANG_UP_TAB);
         emit ringingCall();
     }
 }
 
 void MainToolBar::on_btnHangUp_clicked()
 {
-    if (m_activeTabIndex != HANG_UP_TAB)
+    if (m_activeTabIndex != RINGING_CALL_TAB)
     {
-        activateTab(HANG_UP_TAB);
+        activateTab(RINGING_CALL_TAB);
         emit hangUp();
     }
 }
