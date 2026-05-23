@@ -1,4 +1,4 @@
-#include "signaling_connection.h"
+﻿#include "signaling_connection.h"
 
 #include "sendrecv.h"
 
@@ -214,14 +214,46 @@ protected:
 
                                         const auto message = pos + 1;
 
-                                        // SYN <macA>
-                                        const auto is_syn = g_str_has_prefix(message, "SYN");
-                                        if (is_syn) {
-                                            // macA
-                                            const char* macA = message + 4; // after "SYN "
+                                        // =========================
+                                        // RECEIVE SIDE (SYN / ACK)
+                                        // =========================
 
-                                            // expected macA
-                                            std::string expectedA = base64url_encode(hmac_sha256(session_id, their_giud.str() + "A"));
+                                        const auto is_syn = g_str_has_prefix(message, "SYN");
+                                        const auto is_ack = !is_syn && g_str_has_prefix(message, "ACK");
+
+                                        if (is_syn) {
+
+                                            // Format: SYN <timestamp> <macA>
+                                            const char* p = message + 4; // skip "SYN "
+
+                                            // Parse timestamp
+                                            char* endptr = nullptr;
+                                            long ts = strtol(p, &endptr, 10);
+                                            if (endptr == p || ts <= 0) {
+                                                qCritical() << "Invalid timestamp in SYN";
+                                                requestInterrupted = true;
+                                                return size * nmemb;
+                                            }
+
+                                            // Skip spaces
+                                            while (*endptr == ' ') endptr++;
+
+                                            const char* macA = endptr;
+
+                                            // Anti‑replay window
+                                            time_t now = time(nullptr);
+                                            constexpr long ALLOWED_DRIFT = 10; // seconds
+
+                                            if (labs(now - ts) > ALLOWED_DRIFT) {
+                                                qCritical() << "Timestamp drift too large, dropping connection";
+                                                requestInterrupted = true;
+                                                return size * nmemb;
+                                            }
+
+                                            // expected macA = HMAC(session_id, their_guid + timestamp + "A")
+                                            std::string expectedA = base64url_encode(
+                                                hmac_sha256(session_id, their_giud.str() + std::to_string(ts) + "A")
+                                            );
 
                                             if (expectedA != macA) {
                                                 qCritical() << "MAC A mismatch, dropping connection";
@@ -229,23 +261,29 @@ protected:
                                                 return size * nmemb;
                                             }
 
-                                            // ACK <macB>
+                                            // Build ACK <macB>
                                             std::string min_id = (std::min)(this_guid.str(), their_giud.str());
                                             std::string max_id = (std::max)(this_guid.str(), their_giud.str());
-                                            std::string macB = base64url_encode(hmac_sha256(session_id, min_id + max_id + "B"));
+
+                                            std::string macB = base64url_encode(
+                                                hmac_sha256(session_id, min_id + max_id + "B")
+                                            );
+
                                             std::string ack_msg = "ACK " + macB;
-                                            send_text(ack_msg.data());
+                                            send_text(ack_msg.c_str());
                                         }
 
-                                        // ACK <macB>
-                                        const auto is_ack = !is_syn && g_str_has_prefix(message, "ACK");
-                                        if (is_ack) {
+                                        else if (is_ack) {
 
+                                            // Format: ACK <macB>
                                             const char* macB = message + 4;
 
                                             std::string min_id = (std::min)(this_guid.str(), their_giud.str());
                                             std::string max_id = (std::max)(this_guid.str(), their_giud.str());
-                                            std::string expectedB = base64url_encode(hmac_sha256(session_id, min_id + max_id + "B"));
+
+                                            std::string expectedB = base64url_encode(
+                                                hmac_sha256(session_id, min_id + max_id + "B")
+                                            );
 
                                             if (expectedB != macB) {
                                                 qCritical() << "MAC B mismatch, dropping connection";
@@ -300,10 +338,22 @@ protected:
         if (!startedResult.get())
             return false;
 
-        std::string macA = base64url_encode(hmac_sha256(session_id, this_guid.str() + "A"));
+        // =========================
+        // SEND SIDE (SYN)
+        // =========================
 
-        std::string syn_msg = "SYN " + macA;
-        send_text(syn_msg.data());
+        // timestamp
+        time_t now = time(nullptr);
+        std::string ts = std::to_string(now);
+
+        // macA = HMAC(session_id, this_guid + timestamp + "A")
+        std::string macA = base64url_encode(
+            hmac_sha256(session_id, this_guid.str() + ts + "A")
+        );
+
+        // SYN <timestamp> <macA>
+        std::string syn_msg = "SYN " + ts + " " + macA;
+        send_text(syn_msg.c_str());
 
         return true;
     }
