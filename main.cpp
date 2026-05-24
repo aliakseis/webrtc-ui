@@ -4,15 +4,51 @@
 #include <QFile>
 #include <QStyleFactory>
 #include <QSettings>
+#include <QMessageBox>
 
 #include <gst/gst.h>
 
 #include "preferences.h"
 #include "globals.h"
 
+static GLogFunc old_handler = nullptr;
+
+static void qt_log_handler(
+    const gchar* domain,
+    GLogLevelFlags level,
+    const gchar* message,
+    gpointer user_data)
+{
+    if (old_handler)
+        old_handler(domain, level, message, nullptr);
+
+    if (!(level & (G_LOG_LEVEL_ERROR |
+        G_LOG_LEVEL_CRITICAL 
+        // | G_LOG_LEVEL_WARNING
+        )))
+        return;
+
+    QString text = QString::fromUtf8(message);
+
+    QMetaObject::invokeMethod(
+        qApp,
+        [text]()
+        {
+            QMessageBox::critical(
+                qApp->activeWindow(),
+                "Error",
+                text);
+        },
+        Qt::QueuedConnection);
+}
+
 int main(int argc, char *argv[])
 {
     gst_init( &argc, &argv );
+
+    old_handler = g_log_set_default_handler(
+        qt_log_handler,
+        nullptr);
 
     QApplication a(argc, argv);
 

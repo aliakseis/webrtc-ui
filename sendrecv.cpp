@@ -321,7 +321,7 @@ bool set_connected()
 gboolean cleanup_and_quit_loop (const gchar * msg, enum AppState state)
 {
   if (msg)
-    gst_printerr ("%s\n", msg);
+    g_critical("%s\n", msg);
   if (state > 0)
     app_state = state;
 
@@ -1185,7 +1185,7 @@ start_pipeline (gboolean create_offer)
               ? GST_OBJECT_NAME(GST_MESSAGE_SRC(msg))
               : "unknown";
 
-          g_print("Startup error from %s: %s\n",
+          g_critical("Startup error from %s: %s\n",
               src,
               err ? err->message : "unknown");
 
