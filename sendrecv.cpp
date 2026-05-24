@@ -1161,9 +1161,56 @@ start_pipeline (gboolean create_offer)
   webrtcbin_get_stats_id = g_timeout_add (100, (GSourceFunc) webrtcbin_get_stats, this);
 
   gst_print ("Starting pipeline\n");
-  auto ret = gst_element_set_state (GST_ELEMENT (pipe1), GST_STATE_PLAYING);
+  auto ret = gst_element_set_state(pipe1, GST_STATE_PLAYING);
+
   if (ret == GST_STATE_CHANGE_FAILURE)
-    goto err;
+  {
+      GstBus* bus = gst_element_get_bus(pipe1);
+
+      GstMessage* msg =
+          gst_bus_timed_pop_filtered(
+              bus,
+              GST_SECOND,
+              GST_MESSAGE_ERROR);
+
+      if (msg)
+      {
+          GError* err = nullptr;
+          gchar* debug = nullptr;
+
+          gst_message_parse_error(msg, &err, &debug);
+
+          const gchar* src =
+              GST_MESSAGE_SRC(msg)
+              ? GST_OBJECT_NAME(GST_MESSAGE_SRC(msg))
+              : "unknown";
+
+          g_print("Startup error from %s: %s\n",
+              src,
+              err ? err->message : "unknown");
+
+          //if (g_str_has_prefix(src, "mfvideosrc"))
+          //{
+          //    cleanup_and_quit_loop(
+          //        "Camera is unavailable. Please connect a camera and try again.",
+          //        true);
+          //}
+          //else
+          //{
+          //    cleanup_and_quit_loop(
+          //        err ? err->message : "Failed to start media pipeline.",
+          //        true);
+          //}
+
+          g_error_free(err);
+          g_free(debug);
+          gst_message_unref(msg);
+      }
+
+      gst_object_unref(bus);
+
+      goto err;
+  }
 
   return TRUE;
 
