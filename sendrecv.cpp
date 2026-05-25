@@ -320,8 +320,12 @@ bool set_connected()
 
 gboolean cleanup_and_quit_loop (const gchar * msg, enum AppState state)
 {
-  if (msg)
-    g_critical("%s\n", msg);
+    if (msg) {
+        g_print("State=%d: %s\n", state, msg);
+        if (state != HANG_UP)
+            g_critical("%s\n", msg);
+    }
+
   if (state > 0)
     app_state = state;
 
