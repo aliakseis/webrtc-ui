@@ -322,11 +322,11 @@ gboolean cleanup_and_quit_loop (const gchar * msg, enum AppState state)
 {
     if (msg) {
         g_print("State=%d: %s\n", state, msg);
-        if (state != HANG_UP)
+        if (state != HANG_UP && state != APP_STATE_UNKNOWN)
             g_critical("%s\n", msg);
     }
 
-  if (state > 0)
+  if (state != APP_STATE_UNKNOWN)
     app_state = state;
 
   if (webrtcbin_get_stats_id)
@@ -1299,24 +1299,25 @@ void on_server_message(const gchar *text) {
           PEER_CALL_ERROR);
   } else if (g_str_has_prefix (text, "ERROR")) {
     /* Handle errors */
+    AppState new_state;
     switch (app_state) {
       case SERVER_CONNECTING:
-        app_state = SERVER_CONNECTION_ERROR;
+          new_state = SERVER_CONNECTION_ERROR;
         break;
       case SERVER_REGISTERING:
-        app_state = SERVER_REGISTRATION_ERROR;
+          new_state = SERVER_REGISTRATION_ERROR;
         break;
       case PEER_CONNECTING:
-        app_state = PEER_CONNECTION_ERROR;
+          new_state = PEER_CONNECTION_ERROR;
         break;
       case PEER_CONNECTED:
       case PEER_CALL_NEGOTIATING:
-        app_state = PEER_CALL_ERROR;
+          new_state = PEER_CALL_ERROR;
         break;
       default:
-        app_state = APP_STATE_ERROR;
+          new_state = APP_STATE_ERROR;
     }
-    cleanup_and_quit_loop (text, APP_STATE_UNKNOWN);
+    cleanup_and_quit_loop (text, new_state);
   } else {
     /* Look for JSON messages containing SDP and ICE candidates */
     JsonParser *parser = json_parser_new ();
