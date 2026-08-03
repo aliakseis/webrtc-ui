@@ -53,20 +53,19 @@ jobs:
     - name: Clone vcpkg
       shell: powershell
       run: |
-        git clone --depth 1 https://github.com/microsoft/vcpkg.git $env:GITHUB_WORKSPACE\vcpkg
-        Write-Host "Cloned vcpkg to: $env:GITHUB_WORKSPACE\vcpkg"
-        Get-ChildItem -Force $env:GITHUB_WORKSPACE\vcpkg
-
-    - name: Restore vcpkg cache
-      uses: actions/cache@v4
-      with:
-        path: |
-          vcpkg/installed
-          vcpkg/packages
-          vcpkg/downloads
-        key: windows-vcpkg-${{ runner.os }}-${{ env.VCPKG_DEFAULT_TRIPLET }}-v1
-        restore-keys: |
-          windows-vcpkg-
+        $vcpkgDir = Join-Path $env:GITHUB_WORKSPACE 'vcpkg'
+        if (Test-Path $vcpkgDir) {
+          Write-Host "Removing existing $vcpkgDir"
+          Remove-Item -Recurse -Force $vcpkgDir
+        }
+        git clone --depth 1 https://github.com/microsoft/vcpkg.git $vcpkgDir
+        Write-Host "Cloned vcpkg to: $vcpkgDir"
+        Get-ChildItem -Force $vcpkgDir
+        if (-not (Test-Path (Join-Path $vcpkgDir 'bootstrap-vcpkg.bat'))) {
+          Write-Host "ERROR: bootstrap-vcpkg.bat missing after clone"
+          Get-ChildItem -Force $env:GITHUB_WORKSPACE
+          exit 1
+        }
 
     - name: Bootstrap vcpkg
       shell: powershell
@@ -74,6 +73,7 @@ jobs:
         $vcpkgRoot = Join-Path $env:GITHUB_WORKSPACE 'vcpkg'
         $bootstrap = Join-Path $vcpkgRoot 'bootstrap-vcpkg.bat'
 
+        Write-Host "Looking for bootstrap at: $bootstrap"
         if (-not (Test-Path $bootstrap)) {
           Write-Host "ERROR: bootstrap-vcpkg.bat not found at: $bootstrap"
           Write-Host "GITHUB_WORKSPACE: $env:GITHUB_WORKSPACE"
@@ -86,6 +86,17 @@ jobs:
 
         Write-Host "Bootstrapping vcpkg from: $bootstrap"
         & $bootstrap
+
+    - name: Restore vcpkg cache
+      uses: actions/cache@v4
+      with:
+        path: |
+          vcpkg/installed
+          vcpkg/packages
+          vcpkg/downloads
+        key: windows-vcpkg-${{ runner.os }}-${{ env.VCPKG_DEFAULT_TRIPLET }}-v1
+        restore-keys: |
+          windows-vcpkg-
 
     - name: Install dependencies
       shell: powershell
