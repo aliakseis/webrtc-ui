@@ -166,10 +166,22 @@ jobs:
           exit 1
         }
 
-        if (-not (Test-Path 'C:\gstreamer\1.0\msvc_x86_64\include\gstreamer-1.0')) {
-          Write-Host "ERROR: GStreamer headers not found under C:\gstreamer\1.0\msvc_x86_64\include\gstreamer-1.0"
+        # Improved diagnostics: if the expected gstreamer-1.0 subfolder isn't present, dump more info
+        $headerPath = 'C:\gstreamer\1.0\msvc_x86_64\include\gstreamer-1.0'
+        if (-not (Test-Path $headerPath)) {
+          Write-Host "WARNING: Expected GStreamer header folder not found: $headerPath"
           Write-Host "Showing first-level contents of C:\gstreamer:"
           Get-ChildItem -Recurse -Path 'C:\gstreamer' -Depth 2 | ForEach-Object { Write-Host $_.FullName }
+          Write-Host "Showing full contents of C:\gstreamer\1.0\msvc_x86_64 (depth 4):"
+          Get-ChildItem -Recurse -Path 'C:\gstreamer\1.0\msvc_x86_64' -Depth 4 | ForEach-Object { Write-Host $_.FullName }
+
+          if (Test-Path 'C:\gstreamer_install_devel.log') {
+            Write-Host "==== GStreamer devel install log (tail) ===="
+            Get-Content C:\gstreamer_install_devel.log -Tail 500 | ForEach-Object { Write-Host $_ }
+            Write-Host "==== end install log ===="
+          }
+
+          # Fail so logs are visible for debugging; once layout is confirmed, we can remove or relax this.
           exit 1
         }
 
@@ -194,7 +206,8 @@ jobs:
           -G Ninja `
           -DCMAKE_BUILD_TYPE="$env:BUILD_TYPE" `
           "-DCMAKE_TOOLCHAIN_FILE=$env:VCPKG_ROOT\scripts\buildsystems\vcpkg.cmake" `
-          -DGSTREAMER_1_0_ROOT_MSVC_X86_64=C:\gstreamer\1.0\msvc_x86_64
+          -DGSTREAMER_1_0_ROOT_MSVC_X86_64=C:\gstreamer\1.0\msvc_x86_64 `
+          -DCMAKE_PREFIX_PATH="C:\gstreamer\1.0\msvc_x86_64"
 
     ######################################################################
     # Build
