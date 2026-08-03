@@ -104,25 +104,36 @@ jobs:
     - name: Restore GStreamer cache
       uses: actions/cache@v4
       with:
-        path: gst.msi
+        path: |
+          gst-runtime.msi
+          gst-devel.msi
         key: gst-1.24.13-msvc
 
     - name: Download GStreamer
       shell: powershell
       run: |
-        if (!(Test-Path "gst.msi"))
+        if (!(Test-Path "gst-runtime.msi"))
         {
             Invoke-WebRequest `
               "https://gstreamer.freedesktop.org/data/pkg/windows/1.24.13/msvc/gstreamer-1.0-msvc-x86_64-1.24.13.msi" `
-              -OutFile "gst.msi"
+              -OutFile "gst-runtime.msi"
+        }
+        if (!(Test-Path "gst-devel.msi"))
+        {
+            Invoke-WebRequest `
+              "https://gstreamer.freedesktop.org/data/pkg/windows/1.24.13/msvc/gstreamer-1.0-devel-msvc-x86_64-1.24.13.msi" `
+              -OutFile "gst-devel.msi"
         }
 
     - name: Install GStreamer
       shell: powershell
       run: |
-        # Install with verbose logging so we can inspect if something goes wrong
+        # Install runtime first, then development files (both with verbose logging)
         Start-Process msiexec `
-            -ArgumentList '/i gst.msi /qn INSTALLDIR=C:\gstreamer /L*V C:\gstreamer_install.log' `
+            -ArgumentList '/i gst-runtime.msi /qn INSTALLDIR=C:\gstreamer /L*V C:\gstreamer_install_runtime.log' `
+            -Wait
+        Start-Process msiexec `
+            -ArgumentList '/i gst-devel.msi /qn INSTALLDIR=C:\gstreamer /L*V C:\gstreamer_install_devel.log' `
             -Wait
 
     - name: Export GStreamer variables and verify install
@@ -142,9 +153,14 @@ jobs:
           Get-ChildItem -Path 'C:\gstreamer' -Force | ForEach-Object { Write-Host $_.FullName }
         } else {
           Write-Host "ERROR: C:\gstreamer directory not present (installer may have failed)."
-          if (Test-Path 'C:\gstreamer_install.log') {
-            Write-Host "==== GStreamer install log (tail) ===="
-            Get-Content C:\gstreamer_install.log -Tail 200 | ForEach-Object { Write-Host $_ }
+          if (Test-Path 'C:\gstreamer_install_runtime.log') {
+            Write-Host "==== GStreamer runtime install log (tail) ===="
+            Get-Content C:\gstreamer_install_runtime.log -Tail 200 | ForEach-Object { Write-Host $_ }
+            Write-Host "==== end install log ===="
+          }
+          if (Test-Path 'C:\gstreamer_install_devel.log') {
+            Write-Host "==== GStreamer devel install log (tail) ===="
+            Get-Content C:\gstreamer_install_devel.log -Tail 200 | ForEach-Object { Write-Host $_ }
             Write-Host "==== end install log ===="
           }
           exit 1
