@@ -53,6 +53,7 @@ jobs:
       with:
         repository: microsoft/vcpkg
         path: vcpkg
+        fetch-depth: 0
 
     - name: Restore vcpkg cache
       uses: actions/cache@v4
@@ -69,7 +70,21 @@ jobs:
     - name: Bootstrap vcpkg
       shell: powershell
       run: |
-        & "$env:VCPKG_ROOT\bootstrap-vcpkg.bat"
+        $vcpkgRoot = Join-Path $env:GITHUB_WORKSPACE 'vcpkg'
+        $bootstrap = Join-Path $vcpkgRoot 'bootstrap-vcpkg.bat'
+
+        if (-not (Test-Path $bootstrap)) {
+          Write-Host "ERROR: bootstrap-vcpkg.bat not found at: $bootstrap"
+          Write-Host "GITHUB_WORKSPACE: $env:GITHUB_WORKSPACE"
+          Write-Host "Listing workspace root:"
+          Get-ChildItem -Force $env:GITHUB_WORKSPACE
+          Write-Host "Listing $vcpkgRoot (if present):"
+          Get-ChildItem -Force $vcpkgRoot -ErrorAction SilentlyContinue
+          exit 1
+        }
+
+        Write-Host "Bootstrapping vcpkg from: $bootstrap"
+        & $bootstrap
 
     - name: Install dependencies
       shell: powershell
