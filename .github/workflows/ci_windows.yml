@@ -129,7 +129,7 @@ jobs:
       shell: powershell
       run: |
         # Export root variables that CMake find modules commonly check
-        Add-Content -Path $env:GITHUB_ENV -Value 'GSTREAMER_1_0_ROOT_MSVC_X86_64=C:\gstreamer'
+        Add-Content -Path $env:GITHUB_ENV -Value 'GSTREAMER_1_0_ROOT_MSVC_X86_64=C:\gstreamer\1.0\msvc_x86_64'
         Add-Content -Path $env:GITHUB_ENV -Value 'GSTREAMER_1_0_ROOT_X86_64=C:\gstreamer'
         Add-Content -Path $env:GITHUB_ENV -Value 'GSTREAMER_ROOT=C:\gstreamer'
 
@@ -150,15 +150,15 @@ jobs:
           exit 1
         }
 
-        if (-not (Test-Path 'C:\gstreamer\include\gstreamer-1.0')) {
-          Write-Host "ERROR: GStreamer headers not found under C:\gstreamer\include\gstreamer-1.0"
+        if (-not (Test-Path 'C:\gstreamer\1.0\msvc_x86_64\include\gstreamer-1.0')) {
+          Write-Host "ERROR: GStreamer headers not found under C:\gstreamer\1.0\msvc_x86_64\include\gstreamer-1.0"
           Write-Host "Showing first-level contents of C:\gstreamer:"
           Get-ChildItem -Recurse -Path 'C:\gstreamer' -Depth 2 | ForEach-Object { Write-Host $_.FullName }
           exit 1
         }
 
-        if (-not (Test-Path 'C:\gstreamer\lib')) {
-          Write-Host "ERROR: GStreamer libs not found under C:\gstreamer\lib"
+        if (-not (Test-Path 'C:\gstreamer\1.0\msvc_x86_64\lib')) {
+          Write-Host "ERROR: GStreamer libs not found under C:\gstreamer\1.0\msvc_x86_64\lib"
           exit 1
         }
 
@@ -175,7 +175,7 @@ jobs:
           -G Ninja `
           -DCMAKE_BUILD_TYPE=$env:BUILD_TYPE `
           "-DCMAKE_TOOLCHAIN_FILE=$env:VCPKG_ROOT\scripts\buildsystems\vcpkg.cmake" `
-          -DGSTREAMER_1_0_ROOT_MSVC_X86_64=C:\gstreamer
+          -DGSTREAMER_1_0_ROOT_MSVC_X86_64=C:\gstreamer\1.0\msvc_x86_64
 
     ######################################################################
     # Build
