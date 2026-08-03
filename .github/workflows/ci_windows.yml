@@ -67,17 +67,17 @@ jobs:
           windows-vcpkg-
 
     - name: Bootstrap vcpkg
-      shell: cmd
+      shell: powershell
       run: |
-        %VCPKG_ROOT%\bootstrap-vcpkg.bat
+        & "$env:VCPKG_ROOT\bootstrap-vcpkg.bat"
 
     - name: Install dependencies
-      shell: cmd
+      shell: powershell
       run: |
-        %VCPKG_ROOT%\vcpkg.exe install ^
-            curl:x64-windows ^
-            openssl:x64-windows ^
-            crossguid:x64-windows
+        & "$env:VCPKG_ROOT\vcpkg.exe" install `
+          curl:x64-windows `
+          openssl:x64-windows `
+          crossguid:x64-windows
 
     ######################################################################
     # GStreamer
