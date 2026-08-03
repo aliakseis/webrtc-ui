@@ -1,0 +1,117 @@
+name: Windows CI
+
+on:
+  #push:
+  #  branches:
+  #    - main
+  #    - master
+  #pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-2022
+
+    env:
+      BUILD_TYPE: Release
+      VCPKG_DEFAULT_TRIPLET: x64-windows
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    #
+    # MSVC
+    #
+    - name: Setup MSVC
+      uses: ilammy/msvc-dev-cmd@v1
+
+    #
+    # CMake
+    #
+    - name: Setup CMake
+      uses: lukka/get-cmake@latest
+
+    #
+    # Qt
+    #
+    - name: Install Qt
+      uses: jurplel/install-qt-action@v4
+      with:
+        version: "5.15.2"
+        host: windows
+        target: desktop
+        arch: win64_msvc2019_64
+        cache: true
+
+    #
+    # vcpkg
+    #
+    - name: Setup vcpkg
+      uses: lukka/run-vcpkg@v11
+
+    - name: Install libraries
+      run: |
+        vcpkg install ^
+          openssl ^
+          curl ^
+          crossguid
+
+    #
+    # GStreamer
+    #
+    - name: Download GStreamer
+      shell: powershell
+      run: |
+        Invoke-WebRequest `
+          https://gstreamer.freedesktop.org/data/pkg/windows/1.24.13/msvc/gstreamer-1.0-msvc-x86_64-1.24.13.msi `
+          -OutFile gst.msi
+
+        Start-Process msiexec `
+          -ArgumentList "/i gst.msi /qn INSTALLDIR=C:\gstreamer" `
+          -Wait
+
+    - name: Set GStreamer environment
+      shell: powershell
+      run: |
+        echo "GSTREAMER_1_0_ROOT_MSVC_X86_64=C:\gstreamer" >> $env:GITHUB_ENV
+        echo "PATH=C:\gstreamer\bin;$env:PATH" >> $env:GITHUB_ENV
+
+    #
+    # Configure
+    #
+    - name: Configure
+      run: >
+        cmake
+        -B build
+        -DCMAKE_BUILD_TYPE=%BUILD_TYPE%
+        -DCMAKE_TOOLCHAIN_FILE=%VCPKG_INSTALLATION_ROOT%\scripts\buildsystems\vcpkg.cmake
+
+    #
+    # Build
+    #
+    - name: Build
+      run: >
+        cmake
+        --build build
+        --config %BUILD_TYPE%
+
+    #
+    # Install (runs windeployqt + applocal)
+    #
+    - name: Install
+      run: >
+        cmake
+        --install build
+        --config %BUILD_TYPE%
+
+    #
+    # Upload artifact
+    #
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: webrtc-ui-windows
+        path: build/bin/**
