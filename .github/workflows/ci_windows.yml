@@ -120,15 +120,47 @@ jobs:
     - name: Install GStreamer
       shell: powershell
       run: |
+        # Install with verbose logging so we can inspect if something goes wrong
         Start-Process msiexec `
-            -ArgumentList '/i gst.msi /qn INSTALLDIR=C:\gstreamer' `
+            -ArgumentList '/i gst.msi /qn INSTALLDIR=C:\gstreamer /L*V C:\gstreamer_install.log' `
             -Wait
 
-    - name: Export GStreamer variables
+    - name: Export GStreamer variables and verify install
       shell: powershell
       run: |
-        "GSTREAMER_1_0_ROOT_MSVC_X86_64=C:\gstreamer" >> $env:GITHUB_ENV
-        "PATH=C:\gstreamer\bin;$env:PATH" >> $env:GITHUB_ENV
+        # Export root variables that CMake find modules commonly check
+        Add-Content -Path $env:GITHUB_ENV -Value 'GSTREAMER_1_0_ROOT_MSVC_X86_64=C:\gstreamer'
+        Add-Content -Path $env:GITHUB_ENV -Value 'GSTREAMER_1_0_ROOT_X86_64=C:\gstreamer'
+        Add-Content -Path $env:GITHUB_ENV -Value 'GSTREAMER_ROOT=C:\gstreamer'
+
+        # Add the bin directory to PATH for subsequent steps
+        Add-Content -Path $env:GITHUB_PATH -Value 'C:\gstreamer\bin'
+
+        # Quick verification of installed contents (fail with helpful message if missing)
+        Write-Host "Listing top-level C:\gstreamer contents..."
+        if (Test-Path 'C:\gstreamer') {
+          Get-ChildItem -Path 'C:\gstreamer' -Force | ForEach-Object { Write-Host $_.FullName }
+        } else {
+          Write-Host "ERROR: C:\gstreamer directory not present (installer may have failed)."
+          if (Test-Path 'C:\gstreamer_install.log') {
+            Write-Host "==== GStreamer install log (tail) ===="
+            Get-Content C:\gstreamer_install.log -Tail 200 | ForEach-Object { Write-Host $_ }
+            Write-Host "==== end install log ===="
+          }
+          exit 1
+        }
+
+        if (-not (Test-Path 'C:\gstreamer\include\gstreamer-1.0')) {
+          Write-Host "ERROR: GStreamer headers not found under C:\gstreamer\include\gstreamer-1.0"
+          Write-Host "Showing first-level contents of C:\gstreamer:"
+          Get-ChildItem -Recurse -Path 'C:\gstreamer' -Depth 2 | ForEach-Object { Write-Host $_.FullName }
+          exit 1
+        }
+
+        if (-not (Test-Path 'C:\gstreamer\lib')) {
+          Write-Host "ERROR: GStreamer libs not found under C:\gstreamer\lib"
+          exit 1
+        }
 
     ######################################################################
     # Configure
@@ -142,7 +174,8 @@ jobs:
           -B build `
           -G Ninja `
           -DCMAKE_BUILD_TYPE=$env:BUILD_TYPE `
-          "-DCMAKE_TOOLCHAIN_FILE=$env:VCPKG_ROOT\scripts\buildsystems\vcpkg.cmake"
+          "-DCMAKE_TOOLCHAIN_FILE=$env:VCPKG_ROOT\scripts\buildsystems\vcpkg.cmake" `
+          -DGSTREAMER_1_0_ROOT_MSVC_X86_64=C:\gstreamer
 
     ######################################################################
     # Build
