@@ -48,12 +48,14 @@ jobs:
     # vcpkg
     ######################################################################
 
-    - name: Checkout vcpkg
-      uses: actions/checkout@v4
-      with:
-        repository: microsoft/vcpkg
-        path: vcpkg
-        fetch-depth: 0
+    # Clone the official vcpkg repository into the workspace so we have
+    # bootstrap-vcpkg.bat and a classic-mode vcpkg instance.
+    - name: Clone vcpkg
+      shell: powershell
+      run: |
+        git clone --depth 1 https://github.com/microsoft/vcpkg.git $env:GITHUB_WORKSPACE\vcpkg
+        Write-Host "Cloned vcpkg to: $env:GITHUB_WORKSPACE\vcpkg"
+        Get-ChildItem -Force $env:GITHUB_WORKSPACE\vcpkg
 
     - name: Restore vcpkg cache
       uses: actions/cache@v4
@@ -62,8 +64,7 @@ jobs:
           vcpkg/installed
           vcpkg/packages
           vcpkg/downloads
-        key: >
-          windows-vcpkg-${{ hashFiles('**/vcpkg.json') }}
+        key: windows-vcpkg-${{ runner.os }}-${{ env.VCPKG_DEFAULT_TRIPLET }}-v1
         restore-keys: |
           windows-vcpkg-
 
