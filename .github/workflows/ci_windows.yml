@@ -11,7 +11,6 @@ permissions:
 
 env:
   BUILD_TYPE: Release
-  VCPKG_ROOT: ${{ github.workspace }}\vcpkg
   VCPKG_DEFAULT_TRIPLET: x64-windows
 
 jobs:
@@ -19,10 +18,18 @@ jobs:
     runs-on: windows-2022
 
     steps:
-    - name: Checkout
+    ######################################################################
+    # Checkout
+    ######################################################################
+
+    - name: Checkout source
       uses: actions/checkout@v4
       with:
         submodules: recursive
+
+    ######################################################################
+    # Toolchain
+    ######################################################################
 
     - name: Setup MSVC
       uses: ilammy/msvc-dev-cmd@v1
@@ -48,88 +55,74 @@ jobs:
     # vcpkg
     ######################################################################
 
-    # Clone the official vcpkg repository into the workspace so we have
-    # bootstrap-vcpkg.bat and a classic-mode vcpkg instance.
-    - name: Clone vcpkg
-      shell: powershell
-      run: |
-        $vcpkgDir = Join-Path $env:GITHUB_WORKSPACE 'vcpkg'
-        if (Test-Path $vcpkgDir) {
-          Write-Host "Removing existing $vcpkgDir"
-          Remove-Item -Recurse -Force $vcpkgDir
-        }
-        git clone --depth 1 https://github.com/microsoft/vcpkg.git $vcpkgDir
-        Write-Host "Cloned vcpkg to: $vcpkgDir"
-        Get-ChildItem -Force $vcpkgDir
-        if (-not (Test-Path (Join-Path $vcpkgDir 'bootstrap-vcpkg.bat'))) {
-          Write-Host "ERROR: bootstrap-vcpkg.bat missing after clone"
-          Get-ChildItem -Force $env:GITHUB_WORKSPACE
-          exit 1
-        }
-
-    - name: Bootstrap vcpkg
-      shell: powershell
-      run: |
-        $vcpkgRoot = Join-Path $env:GITHUB_WORKSPACE 'vcpkg'
-        $bootstrap = Join-Path $vcpkgRoot 'bootstrap-vcpkg.bat'
-
-        Write-Host "Looking for bootstrap at: $bootstrap"
-        if (-not (Test-Path $bootstrap)) {
-          Write-Host "ERROR: bootstrap-vcpkg.bat not found at: $bootstrap"
-          Write-Host "GITHUB_WORKSPACE: $env:GITHUB_WORKSPACE"
-          Write-Host "Listing workspace root:"
-          Get-ChildItem -Force $env:GITHUB_WORKSPACE
-          Write-Host "Listing $vcpkgRoot (if present):"
-          Get-ChildItem -Force $vcpkgRoot -ErrorAction SilentlyContinue
-          exit 1
-        }
-
-        Write-Host "Bootstrapping vcpkg from: $bootstrap"
-        & $bootstrap
+    - name: Checkout vcpkg
+      uses: actions/checkout@v4
+      with:
+        repository: microsoft/vcpkg
+        path: vcpkg
 
     - name: Restore vcpkg cache
       uses: actions/cache@v4
       with:
         path: |
-          vcpkg/installed
-          vcpkg/packages
           vcpkg/downloads
+          vcpkg/packages
+          vcpkg/installed
         key: windows-vcpkg-${{ runner.os }}-${{ env.VCPKG_DEFAULT_TRIPLET }}-v1
         restore-keys: |
           windows-vcpkg-
+
+    - name: Bootstrap vcpkg
+      shell: powershell
+      run: |
+        $vcpkgRoot = Join-Path $env:GITHUB_WORKSPACE "vcpkg"
+
+        & "$vcpkgRoot\bootstrap-vcpkg.bat"
+
+        if ($LASTEXITCODE -ne 0) {
+            throw "bootstrap-vcpkg failed."
+        }
+
+        "VCPKG_ROOT=$vcpkgRoot" >> $env:GITHUB_ENV
 
     - name: Install dependencies
       shell: powershell
       run: |
         & "$env:VCPKG_ROOT\vcpkg.exe" install `
-          curl:x64-windows `
-          openssl:x64-windows `
-          crossguid:x64-windows
+            curl:x64-windows `
+            openssl:x64-windows `
+            crossguid:x64-windows
+
+        if ($LASTEXITCODE -ne 0) {
+            throw "vcpkg install failed."
+        }
 
     ######################################################################
     # GStreamer
     ######################################################################
 
-    - name: Cache GStreamer installer
+    - name: Restore GStreamer cache
       uses: actions/cache@v4
       with:
         path: gst.msi
         key: gst-1.24.13-msvc
 
     - name: Download GStreamer
-      if: ${{ !hashFiles('gst.msi') }}
       shell: powershell
       run: |
-        Invoke-WebRequest `
-          "https://gstreamer.freedesktop.org/data/pkg/windows/1.24.13/msvc/gstreamer-1.0-msvc-x86_64-1.24.13.msi" `
-          -OutFile gst.msi
+        if (!(Test-Path "gst.msi"))
+        {
+            Invoke-WebRequest `
+              "https://gstreamer.freedesktop.org/data/pkg/windows/1.24.13/msvc/gstreamer-1.0-msvc-x86_64-1.24.13.msi" `
+              -OutFile "gst.msi"
+        }
 
     - name: Install GStreamer
       shell: powershell
       run: |
         Start-Process msiexec `
-          -ArgumentList "/i gst.msi /qn INSTALLDIR=C:\gstreamer" `
-          -Wait
+            -ArgumentList '/i gst.msi /qn INSTALLDIR=C:\gstreamer' `
+            -Wait
 
     - name: Export GStreamer variables
       shell: powershell
@@ -142,32 +135,32 @@ jobs:
     ######################################################################
 
     - name: Configure
-      shell: cmd
+      shell: powershell
       run: |
-        cmake ^
-          -S . ^
-          -B build ^
-          -G Ninja ^
-          -DCMAKE_BUILD_TYPE=%BUILD_TYPE% ^
-          -DCMAKE_TOOLCHAIN_FILE=%VCPKG_ROOT%\scripts\buildsystems\vcpkg.cmake
+        cmake `
+          -S . `
+          -B build `
+          -G Ninja `
+          -DCMAKE_BUILD_TYPE=$env:BUILD_TYPE `
+          "-DCMAKE_TOOLCHAIN_FILE=$env:VCPKG_ROOT\scripts\buildsystems\vcpkg.cmake"
 
     ######################################################################
     # Build
     ######################################################################
 
     - name: Build
-      shell: cmd
+      shell: powershell
       run: |
-        cmake --build build --config %BUILD_TYPE% --parallel
+        cmake --build build --parallel
 
     ######################################################################
     # Install
     ######################################################################
 
     - name: Install
-      shell: cmd
+      shell: powershell
       run: |
-        cmake --install build --config %BUILD_TYPE% --prefix install
+        cmake --install build --prefix install
 
     ######################################################################
     # Package
@@ -176,16 +169,21 @@ jobs:
     - name: Archive
       shell: powershell
       run: |
+        if (!(Test-Path "install"))
+        {
+            throw "Install directory not found."
+        }
+
         Compress-Archive `
-          -Path install\* `
-          -DestinationPath webrtc-ui-windows.zip `
-          -Force
+            -Path "install\*" `
+            -DestinationPath "webrtc-ui-windows.zip" `
+            -Force
 
     ######################################################################
     # Upload
     ######################################################################
 
-    - name: Upload Artifact
+    - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
         name: webrtc-ui-windows
