@@ -161,21 +161,21 @@ jobs:
           return $proc.ExitCode
         }
 
-    # Install runtime
-    $rc = Run-MsiInstall $runtime $runtimeLog
-    if ($rc -ne 0 -and $rc -ne 3010) {
-      Write-Host "GStreamer runtime installer failed with exit code $rc. Tail of log:"
-      if (Test-Path $runtimeLog) { Get-Content $runtimeLog -Tail 200 | ForEach-Object { Write-Host $_ } } else { Write-Host "Log not found: $runtimeLog" }
-      exit $rc
-    }
+        # Install runtime
+        $rc = Run-MsiInstall $runtime $runtimeLog
+        if ($rc -ne 0 -and $rc -ne 3010) {
+        Write-Host "GStreamer runtime installer failed with exit code $rc. Tail of log:"
+        if (Test-Path $runtimeLog) { Get-Content $runtimeLog -Tail 200 | ForEach-Object { Write-Host $_ } } else { Write-Host "Log not found: $runtimeLog" }
+        exit $rc
+        }
 
-    # Install devel
-    $rc = Run-MsiInstall $devel $develLog
-    if ($rc -ne 0 -and $rc -ne 3010) {
-      Write-Host "GStreamer devel installer failed with exit code $rc. Tail of log:"
-      if (Test-Path $develLog) { Get-Content $develLog -Tail 200 | ForEach-Object { Write-Host $_ } } else { Write-Host "Log not found: $develLog" }
-      exit $rc
-    }
+        # Install devel
+        $rc = Run-MsiInstall $devel $develLog
+        if ($rc -ne 0 -and $rc -ne 3010) {
+        Write-Host "GStreamer devel installer failed with exit code $rc. Tail of log:"
+        if (Test-Path $develLog) { Get-Content $develLog -Tail 200 | ForEach-Object { Write-Host $_ } } else { Write-Host "Log not found: $develLog" }
+        exit $rc
+        }
 
     - name: Export GStreamer variables and verify install
       shell: powershell
