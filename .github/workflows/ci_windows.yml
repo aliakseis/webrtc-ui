@@ -131,22 +131,31 @@ jobs:
         $runtime = 'gst-runtime.msi'
         $devel   = 'gst-devel.msi'
         $installDir = 'C:\gstreamer'
+        $runtimeLog = Join-Path $env:TEMP 'gstreamer_install_runtime.log'
+        $develLog   = Join-Path $env:TEMP 'gstreamer_install_devel.log'
+
         Write-Host "Installing GStreamer to $installDir"
 
-        $argsRuntime = @('/i', $runtime, '/qn', "INSTALLDIR=$installDir", '/l*v', 'C:\gstreamer_install_runtime.log')
-        Start-Process -FilePath msiexec -ArgumentList $argsRuntime -Wait -NoNewWindow
-        if ($LASTEXITCODE -ne 0) {
-          Write-Host "GStreamer runtime installer failed. Tail of log:"
-          Get-Content C:\gstreamer_install_runtime.log -Tail 200 | ForEach-Object { Write-Host $_ }
-          exit 1
+        # Install runtime (invoke msiexec directly so $LASTEXITCODE is populated)
+        $runtimeArgs = "/i `"$runtime`" /qn INSTALLDIR=`"$installDir`" /l*v `"$runtimeLog`" /norestart"
+        Write-Host "Running: msiexec $runtimeArgs"
+        & msiexec.exe $runtimeArgs
+        $rc = $LASTEXITCODE
+        if ($rc -ne 0 -and $rc -ne 3010) {
+          Write-Host "GStreamer runtime installer failed with exit code $rc. Tail of log:"
+          if (Test-Path $runtimeLog) { Get-Content $runtimeLog -Tail 200 | ForEach-Object { Write-Host $_ } } else { Write-Host "Log not found: $runtimeLog" }
+          exit $rc
         }
 
-        $argsDevel = @('/i', $devel, '/qn', "INSTALLDIR=$installDir", '/l*v', 'C:\gstreamer_install_devel.log')
-        Start-Process -FilePath msiexec -ArgumentList $argsDevel -Wait -NoNewWindow
-        if ($LASTEXITCODE -ne 0) {
-          Write-Host "GStreamer devel installer failed. Tail of log:"
-          Get-Content C:\gstreamer_install_devel.log -Tail 200 | ForEach-Object { Write-Host $_ }
-          exit 1
+        # Install devel
+        $develArgs = "/i `"$devel`" /qn INSTALLDIR=`"$installDir`" /l*v `"$develLog`" /norestart"
+        Write-Host "Running: msiexec $develArgs"
+        & msiexec.exe $develArgs
+        $rc = $LASTEXITCODE
+        if ($rc -ne 0 -and $rc -ne 3010) {
+          Write-Host "GStreamer devel installer failed with exit code $rc. Tail of log:"
+          if (Test-Path $develLog) { Get-Content $develLog -Tail 200 | ForEach-Object { Write-Host $_ } } else { Write-Host "Log not found: $develLog" }
+          exit $rc
         }
 
     - name: Export GStreamer variables and verify install
