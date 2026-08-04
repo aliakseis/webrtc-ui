@@ -128,13 +128,26 @@ jobs:
     - name: Install GStreamer
       shell: powershell
       run: |
-        # Install runtime first, then development files (both with verbose logging)
-        Start-Process msiexec `
-            -ArgumentList '/i gst-runtime.msi /qn INSTALLDIR=C:\gstreamer /L*V C:\gstreamer_install_runtime.log' `
-            -Wait
-        Start-Process msiexec `
-            -ArgumentList '/i gst-devel.msi /qn INSTALLDIR=C:\gstreamer /L*V C:\gstreamer_install_devel.log' `
-            -Wait
+        $runtime = 'gst-runtime.msi'
+        $devel   = 'gst-devel.msi'
+        $installDir = 'C:\gstreamer'
+        Write-Host "Installing GStreamer to $installDir"
+
+        $argsRuntime = @('/i', $runtime, '/qn', "INSTALLDIR=$installDir", '/l*v', 'C:\gstreamer_install_runtime.log')
+        Start-Process -FilePath msiexec -ArgumentList $argsRuntime -Wait -NoNewWindow
+        if ($LASTEXITCODE -ne 0) {
+          Write-Host "GStreamer runtime installer failed. Tail of log:"
+          Get-Content C:\gstreamer_install_runtime.log -Tail 200 | ForEach-Object { Write-Host $_ }
+          exit 1
+        }
+
+        $argsDevel = @('/i', $devel, '/qn', "INSTALLDIR=$installDir", '/l*v', 'C:\gstreamer_install_devel.log')
+        Start-Process -FilePath msiexec -ArgumentList $argsDevel -Wait -NoNewWindow
+        if ($LASTEXITCODE -ne 0) {
+          Write-Host "GStreamer devel installer failed. Tail of log:"
+          Get-Content C:\gstreamer_install_devel.log -Tail 200 | ForEach-Object { Write-Host $_ }
+          exit 1
+        }
 
     - name: Export GStreamer variables and verify install
       shell: powershell
@@ -200,14 +213,17 @@ jobs:
         VCPKG_ROOT: ${{ env.VCPKG_ROOT }}
         BUILD_TYPE: ${{ env.BUILD_TYPE }}
       run: |
+        $vcpkgToolchain = "$env:VCPKG_ROOT\scripts\buildsystems\vcpkg.cmake"
+        # Use forward slashes for GStreamer paths to avoid backslash escape issues in generated CMake scripts
+        $gstreamer_root = 'C:/gstreamer/1.0/msvc_x86_64'
         cmake `
           -S . `
           -B build `
           -G Ninja `
           -DCMAKE_BUILD_TYPE="$env:BUILD_TYPE" `
-          "-DCMAKE_TOOLCHAIN_FILE=$env:VCPKG_ROOT\scripts\buildsystems\vcpkg.cmake" `
-          -DGSTREAMER_1_0_ROOT_MSVC_X86_64=C:\gstreamer\1.0\msvc_x86_64 `
-          -DCMAKE_PREFIX_PATH="C:\gstreamer\1.0\msvc_x86_64"
+          -DCMAKE_TOOLCHAIN_FILE="$vcpkgToolchain" `
+          -DGSTREAMER_1_0_ROOT_MSVC_X86_64="$gstreamer_root" `
+          -DCMAKE_PREFIX_PATH="$gstreamer_root"
 
     ######################################################################
     # Build
@@ -216,16 +232,20 @@ jobs:
     - name: Build
       shell: powershell
       run: |
-        cmake --build build --parallel
-
-    ######################################################################
-    # Install
-    ######################################################################
+        cmake --build build --parallel --config $env:BUILD_TYPE
 
     - name: Install
       shell: powershell
       run: |
-        cmake --install build --prefix install
+        # use an absolute prefix (forward slashes) to avoid backslash escape errors
+        $installPrefix = "${{ github.workspace }}/install"
+        $installPrefix = $installPrefix -replace '\\','/'   # ensure forward slashes
+        # verify the main target is built (adjust target name if different)
+        $exePath = Join-Path "${{ github.workspace }}" "build/${env:BUILD_TYPE}/webrtc-ui.exe"
+        if (-not (Test-Path $exePath)) {
+          Write-Host "WARNING: built exe not found at $exePath - attempting install anyway to surface CMake errors"
+        }
+        cmake --install build --config $env:BUILD_TYPE --prefix $installPrefix
 
     ######################################################################
     # Package
