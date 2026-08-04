@@ -131,32 +131,51 @@ jobs:
         $runtime = 'gst-runtime.msi'
         $devel   = 'gst-devel.msi'
         $installDir = 'C:\gstreamer'
-        $runtimeLog = Join-Path $env:TEMP 'gstreamer_install_runtime.log'
-        $develLog   = Join-Path $env:TEMP 'gstreamer_install_devel.log'
+        # write logs to known, fixed locations so the later verification step can find them
+        $runtimeLog = 'C:\gstreamer_install_runtime.log'
+        $develLog   = 'C:\gstreamer_install_devel.log'
 
         Write-Host "Installing GStreamer to $installDir"
 
-        # Install runtime (invoke msiexec directly so $LASTEXITCODE is populated)
-        $runtimeArgs = "/i `"$runtime`" /qn INSTALLDIR=`"$installDir`" /l*v `"$runtimeLog`" /norestart"
-        Write-Host "Running: msiexec $runtimeArgs"
-        & msiexec.exe $runtimeArgs
-        $rc = $LASTEXITCODE
-        if ($rc -ne 0 -and $rc -ne 3010) {
-          Write-Host "GStreamer runtime installer failed with exit code $rc. Tail of log:"
-          if (Test-Path $runtimeLog) { Get-Content $runtimeLog -Tail 200 | ForEach-Object { Write-Host $_ } } else { Write-Host "Log not found: $runtimeLog" }
-          exit $rc
+        # Ensure MSI files are present
+        if (-not (Test-Path $runtime)) {
+          throw "Runtime MSI not found: $runtime"
+        }
+        if (-not (Test-Path $devel)) {
+          throw "Devel MSI not found: $devel"
         }
 
-        # Install devel
-        $develArgs = "/i `"$devel`" /qn INSTALLDIR=`"$installDir`" /l*v `"$develLog`" /norestart"
-        Write-Host "Running: msiexec $develArgs"
-        & msiexec.exe $develArgs
-        $rc = $LASTEXITCODE
-        if ($rc -ne 0 -and $rc -ne 3010) {
-          Write-Host "GStreamer devel installer failed with exit code $rc. Tail of log:"
-          if (Test-Path $develLog) { Get-Content $develLog -Tail 200 | ForEach-Object { Write-Host $_ } } else { Write-Host "Log not found: $develLog" }
-          exit $rc
+        # Helper to run msiexec with proper arguments and capture exit code
+        function Run-MsiInstall($msiPath, $logPath) {
+          $args = @(
+            "/i",
+            (Resolve-Path $msiPath).Path,
+            "/qn",
+            "INSTALLDIR=$installDir",
+            "/l*v",
+            $logPath,
+            "/norestart"
+          )
+          Write-Host "Running: msiexec.exe $($args -join ' ')"
+          $proc = Start-Process -FilePath msiexec.exe -ArgumentList $args -Wait -NoNewWindow -PassThru
+          return $proc.ExitCode
         }
+
+    # Install runtime
+    $rc = Run-MsiInstall $runtime $runtimeLog
+    if ($rc -ne 0 -and $rc -ne 3010) {
+      Write-Host "GStreamer runtime installer failed with exit code $rc. Tail of log:"
+      if (Test-Path $runtimeLog) { Get-Content $runtimeLog -Tail 200 | ForEach-Object { Write-Host $_ } } else { Write-Host "Log not found: $runtimeLog" }
+      exit $rc
+    }
+
+    # Install devel
+    $rc = Run-MsiInstall $devel $develLog
+    if ($rc -ne 0 -and $rc -ne 3010) {
+      Write-Host "GStreamer devel installer failed with exit code $rc. Tail of log:"
+      if (Test-Path $develLog) { Get-Content $develLog -Tail 200 | ForEach-Object { Write-Host $_ } } else { Write-Host "Log not found: $develLog" }
+      exit $rc
+    }
 
     - name: Export GStreamer variables and verify install
       shell: powershell
