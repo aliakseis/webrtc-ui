@@ -78,12 +78,11 @@ jobs:
         $vcpkgRoot = Join-Path $env:GITHUB_WORKSPACE "vcpkg"
 
         & "$vcpkgRoot\bootstrap-vcpkg.bat"
+        if ($LASTEXITCODE -ne 0) { throw "bootstrap-vcpkg failed." }
 
-        if ($LASTEXITCODE -ne 0) {
-            throw "bootstrap-vcpkg failed."
-        }
-
-        "VCPKG_ROOT=$vcpkgRoot" >> $env:GITHUB_ENV
+        # Use forward slashes to avoid CMake/backslash-escape issues
+        $vcpkgRootFs = $vcpkgRoot -replace '\\','/'
+        "VCPKG_ROOT=$vcpkgRootFs" >> $env:GITHUB_ENV
 
     - name: Install dependencies
       shell: powershell
@@ -180,13 +179,13 @@ jobs:
     - name: Export GStreamer variables and verify install
       shell: powershell
       run: |
-        # Export root variables that CMake find modules commonly check
-        Add-Content -Path $env:GITHUB_ENV -Value 'GSTREAMER_1_0_ROOT_MSVC_X86_64=C:\gstreamer\1.0\msvc_x86_64'
-        Add-Content -Path $env:GITHUB_ENV -Value 'GSTREAMER_1_0_ROOT_X86_64=C:\gstreamer'
-        Add-Content -Path $env:GITHUB_ENV -Value 'GSTREAMER_ROOT=C:\gstreamer'
+        # Export using forward slashes to prevent backslash escape sequences in CMake files
+        Add-Content -Path $env:GITHUB_ENV -Value 'GSTREAMER_1_0_ROOT_MSVC_X86_64=C:/gstreamer/1.0/msvc_x86_64'
+        Add-Content -Path $env:GITHUB_ENV -Value 'GSTREAMER_1_0_ROOT_X86_64=C:/gstreamer'
+        Add-Content -Path $env:GITHUB_ENV -Value 'GSTREAMER_ROOT=C:/gstreamer'
 
-        # Add the bin directory to PATH for subsequent steps
-        Add-Content -Path $env:GITHUB_PATH -Value 'C:\gstreamer\bin'
+        # Add bin to PATH with forward slashes (works fine on Windows)
+        Add-Content -Path $env:GITHUB_PATH -Value 'C:/gstreamer/bin'
 
         # Quick verification of installed contents (fail with helpful message if missing)
         Write-Host "Listing top-level C:\gstreamer contents..."
@@ -260,7 +259,16 @@ jobs:
     - name: Build
       shell: powershell
       run: |
-        cmake --build build --parallel --config $env:BUILD_TYPE
+        # Build the main target explicitly to ensure the exe is produced
+        cmake --build build --config $env:BUILD_TYPE --target webrtc-ui --parallel
+
+        # If the exe isn't present, list build output for debugging
+        $exeRel = "build/$($env:BUILD_TYPE)/webrtc-ui.exe"
+        if (-not (Test-Path $exeRel)) {
+          Write-Host "WARNING: built exe not found at $exeRel"
+          Write-Host "Listing build/$($env:BUILD_TYPE):"
+          Get-ChildItem -Path "build/$($env:BUILD_TYPE)" -Recurse -Force | ForEach-Object { Write-Host $_.FullName }
+        }
 
     - name: Install
       shell: powershell
@@ -269,9 +277,11 @@ jobs:
         $installPrefix = "${{ github.workspace }}/install"
         $installPrefix = $installPrefix -replace '\\','/'   # ensure forward slashes
         # verify the main target is built (adjust target name if different)
-        $exePath = Join-Path "${{ github.workspace }}" "build/${env:BUILD_TYPE}/webrtc-ui.exe"
+        $exePath = "build/$($env:BUILD_TYPE)/webrtc-ui.exe"
         if (-not (Test-Path $exePath)) {
           Write-Host "WARNING: built exe not found at $exePath - attempting install anyway to surface CMake errors"
+          Write-Host "Listing build directory:"
+          Get-ChildItem -Path "build" -Recurse -Force | ForEach-Object { Write-Host $_.FullName }
         }
         cmake --install build --config $env:BUILD_TYPE --prefix $installPrefix
 
