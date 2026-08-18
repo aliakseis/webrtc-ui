@@ -19,6 +19,8 @@ You can use https://github.com/aliakseis/sendrecv for testing.
 
 Free TURN server used: https://www.expressturn.com/
 
+See also https://webrtc.github.io/samples/src/content/peerconnection/trickle-ice/ .
+
 ![bug](https://user-images.githubusercontent.com/11851670/224350642-5d3b9b2a-86f7-472b-9911-6f3de2fc89ba.jpg)
 
 ![WebRTC](WebRTC.jpg)
